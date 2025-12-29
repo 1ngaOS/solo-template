@@ -1,0 +1,25 @@
+{
+  "name": "@solo-template/utils",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared utilities for the solo monorepo template",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.4",
+    "vitest": "^1.6.0"
+  },
+  "keywords": [
+    "utilities",
+    "shared"
+  ]
+}
+
