@@ -62,7 +62,7 @@
 					<div class="text-purple-600 text-4xl mb-4">⚡</div>
 					<h4 class="text-xl font-semibold mb-2">Modern Frontend</h4>
 					<p class="text-gray-600">
-						SvelteKit with static site generation and Tailwind CSS v4 for beautiful UIs.
+						SvelteKit with server-side rendering and Tailwind CSS v4 for beautiful UIs.
 					</p>
 				</div>
 				<div class="bg-white p-6 rounded-xl shadow-md">
@@ -92,7 +92,7 @@
 					<div>
 						<h4 class="font-semibold text-lg mb-3">Frontend</h4>
 						<ul class="space-y-2 text-gray-600">
-							<li>• SvelteKit with static generation</li>
+							<li>• SvelteKit with server-side rendering</li>
 							<li>• Tailwind CSS v4</li>
 							<li>• TypeScript support</li>
 							<li>• SEO optimized</li>

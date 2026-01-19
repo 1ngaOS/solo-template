@@ -6,6 +6,300 @@ on:
       - 'apps/backend/**'
       - '.github/workflows/backend.yml'
   push:
+    branches: [main, uat, prod]
+    paths:
+      - 'apps/backend/**'
+      - '.github/workflows/backend.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Format check
+        working-directory: apps/backend
+        run: cargo fmt -- --check
+
+      - name: Lint
+        working-directory: apps/backend
+        run: cargo clippy -- -D warnings
+
+      - name: Check
+        working-directory: apps/backend
+        run: cargo check
+
+      - name: Test
+        working-directory: apps/backend
+        run: cargo test
+
+      - name: Job Summary
+        if: always()
+        run: |
+          echo "## 🔍 Job Summary: Backend - Test" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Backend" >> $GITHUB_STEP_SUMMARY
+          echo "**Technology:** Rust, Axum" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Steps Executed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Checkout code" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Rustfmt check" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Clippy lint" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Cargo check" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Cargo test" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  build:
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/prod')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Build
+        working-directory: apps/backend
+        run: cargo build --release
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: apps/backend/target/release/backend
+
+      - name: Job Summary
+        if: always()
+        run: |
+          echo "## 🔍 Job Summary: Backend - Build" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Backend" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Output:** apps/backend/target/release/backend" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  docker:
+    needs: build
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/prod')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE_NAME: ghcr.io/${{ github.repository }}/backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from Cargo.toml
+        id: version
+        working-directory: apps/backend
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          if [ -z "$VERSION" ]; then
+            echo "Error: Version is empty in Cargo.toml"
+            grep -A 2 -B 2 '^version' Cargo.toml || echo "Version line not found"
+            exit 1
+          fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "Error: Invalid version format: $VERSION (expected MAJOR.MINOR.PATCH)"
+            exit 1
+          fi
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "major=$MAJOR" >> $GITHUB_OUTPUT
+          echo "minor=$MINOR" >> $GITHUB_OUTPUT
+          echo "patch=$PATCH" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/backend
+          file: apps/backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }}.${{ steps.version.outputs.patch }}
+            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }}
+            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major }}
+            ${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ github.ref == 'refs/heads/main' && format('{0}:latest', env.IMAGE_NAME) || '' }}
+
+      - name: Job Summary
+        if: always()
+        run: |
+          echo "## 🔍 Job Summary: Backend - Docker" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  deploy:
+    needs: build
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/prod')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: |
+          echo "Deploying Backend (placeholder)"
+
+      - name: Job Summary
+        if: always()
+        run: |
+          echo "## 🔍 Job Summary: Backend - Deploy" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  release:
+    needs: [build, deploy, docker]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/prod')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Release
+        run: |
+          echo "Release step placeholder for Backend"
+
+      - name: Job Summary
+        if: always()
+        run: |
+          echo "## 🔍 Job Summary: Backend - Release" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  monitor-failures:
+    needs: [test, build, docker, deploy, release]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      actions: read
+    steps:
+      - name: Report failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const runId = context.runId;
+            const workflow = context.workflow;
+            const branch = context.ref.replace('refs/heads/', '');
+            const title = `🚨 CI/CD Failure: Backend - ${branch} branch`;
+
+            const { data: jobs } = await github.rest.actions.listJobsForWorkflowRun({
+              owner,
+              repo,
+              run_id: runId
+            });
+
+            const failedJobs = jobs.jobs.filter(job => job.conclusion === 'failure');
+            const failureDetails = failedJobs.map(job => {
+              const failedSteps = (job.steps || []).filter(step => step.conclusion === 'failure');
+              const stepsText = failedSteps.length
+                ? failedSteps.map(step => `  - ${step.name}`).join('\n')
+                : '  - (no failed steps reported)';
+              return `- **${job.name}** (${job.conclusion})\n${stepsText}`;
+            }).join('\n');
+
+            const { data: milestones } = await github.rest.issues.listMilestones({
+              owner,
+              repo,
+              state: 'open'
+            });
+
+            let failureMilestone = milestones.find(m => m.title.toLowerCase().includes('ci/cd failures'));
+            if (!failureMilestone) {
+              const created = await github.rest.issues.createMilestone({
+                owner,
+                repo,
+                title: 'CI/CD Failures',
+                description: 'Track all CI/CD pipeline failures across the repository'
+              });
+              failureMilestone = created.data;
+            }
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              state: 'all',
+              labels: 'ci-failure'
+            });
+
+            const existing = issues.find(issue => issue.title === title);
+            const body = [
+              `## 🚨 CI/CD Failure Report`,
+              ``,
+              `- **Workflow:** ${workflow}`,
+              `- **Branch:** ${branch}`,
+              `- **Run ID:** ${runId}`,
+              `- **Run URL:** ${context.payload.repository.html_url}/actions/runs/${runId}`,
+              ``,
+              `### Failed Jobs`,
+              failureDetails || '- No failed jobs found',
+              ``,
+              `### Troubleshooting`,
+              `- Review the failed job logs`,
+              `- Re-run the workflow after fixing issues`,
+              ``,
+              `**Completed at:** ${new Date().toISOString()}`
+            ].join('\n');
+
+            if (existing) {
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: existing.number,
+                state: 'open',
+                body,
+                milestone: failureMilestone.number
+              });
+            } else {
+              await github.rest.issues.create({
+                owner,
+                repo,
+                title,
+                body,
+                labels: ['ci-failure', 'backend', 'bug', 'priority-high'],
+                milestone: failureMilestone.number
+              });
+            }
+name: Backend CI/CD
+
+on:
+  pull_request:
+    paths:
+      - 'apps/backend/**'
+      - '.github/workflows/backend.yml'
+  push:
     branches: [main]
     paths:
       - 'apps/backend/**'

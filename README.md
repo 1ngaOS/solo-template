@@ -5,7 +5,7 @@ A production-ready monorepo template for solo projects featuring backend, fronte
 ## 🚀 Features
 
 - **Backend**: Rust-based API server with base endpoints
-- **Frontend**: SvelteKit application with static site generation
+- **Frontend**: SvelteKit application with SSR
 - **Documentation**: Docusaurus documentation site
 - **Shared Modules**: Reusable services and utilities
 - **Monorepo**: Managed with pnpm workspaces
@@ -103,7 +103,7 @@ Rust-based API server with base endpoints:
 ### Frontend (`apps/frontend`)
 
 SvelteKit application with:
-- Static site generation
+- Server-side rendering (SSR)
 - Tailwind CSS v4 for styling
 - Responsive design
 - SEO optimization

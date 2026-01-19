@@ -42,7 +42,7 @@ The frontend is built with:
 
 - **Framework**: SvelteKit
 - **Features**:
-  - Static site generation (SSG)
+  - Server-side rendering (SSR)
   - Tailwind CSS v4 for styling
   - TypeScript support
   - SEO optimization

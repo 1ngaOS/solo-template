@@ -1,7 +1,9 @@
 # Build stage
-FROM rust:1.75 as builder
+FROM rust:latest-alpine AS builder
 
 WORKDIR /app
+
+RUN apk add --no-cache musl-dev pkgconfig openssl-dev
 
 # Copy dependency files
 COPY Cargo.toml Cargo.lock* ./
@@ -16,15 +18,12 @@ RUN mkdir src && \
 COPY . .
 
 # Build the application
-RUN touch src/main.rs && \
-    cargo build --release
+RUN cargo build --release
 
 # Runtime stage
-FROM debian:bookworm-slim
+FROM alpine:3.19
 
-RUN apt-get update && \
-    apt-get install -y ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache ca-certificates
 
 WORKDIR /app
 

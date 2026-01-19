@@ -1,10 +1,10 @@
 # Frontend Application
 
-SvelteKit frontend application with static site generation.
+SvelteKit frontend application with server-side rendering (SSR).
 
 ## Features
 
-- Static site generation (SSG)
+- Server-side rendering (SSR)
 - Tailwind CSS v4 for styling
 - TypeScript support
 - SEO optimized
@@ -37,9 +37,9 @@ pnpm format
 
 ## Build Output
 
-The application builds to the `build` directory and can be deployed to any static hosting service like:
-- Cloudflare Pages
-- Vercel
-- Netlify
-- GitHub Pages
+The application builds to the `build` directory and runs as a Node server:
+
+```bash
+node build
+```
 

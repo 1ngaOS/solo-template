@@ -6,6 +6,255 @@ on:
       - 'apps/frontend/**'
       - '.github/workflows/frontend.yml'
   push:
+    branches: [main, uat, prod]
+    paths:
+      - 'apps/frontend/**'
+      - '.github/workflows/frontend.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Install Playwright browsers
+        run: pnpm --filter frontend exec playwright install --with-deps chromium
+
+      - name: Format check
+        run: pnpm frontend format:check
+
+      - name: Lint
+        run: pnpm frontend lint
+
+      - name: Type check
+        run: pnpm frontend check
+
+      - name: Test (Playwright)
+        env:
+          MOCK_API: 'true'
+        run: pnpm frontend test
+
+      - name: Job Summary
+        if: always()
+        run: |
+          echo "## 🔍 Job Summary: Frontend - Test" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Frontend" >> $GITHUB_STEP_SUMMARY
+          echo "**Technology:** SvelteKit, Playwright" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Steps Executed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Checkout code" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Install pnpm" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Setup Node.js" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Install dependencies" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Format check" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Lint" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Type check" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Playwright tests" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  build:
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/prod')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build
+        run: pnpm frontend build
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: apps/frontend/build
+
+      - name: Job Summary
+        if: always()
+        run: |
+          echo "## 🔍 Job Summary: Frontend - Build" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Frontend" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Output:** apps/frontend/build" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  deploy:
+    needs: build
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/prod')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: |
+          echo "Deploying Frontend (placeholder)"
+
+      - name: Job Summary
+        if: always()
+        run: |
+          echo "## 🔍 Job Summary: Frontend - Deploy" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  release:
+    needs: [build, deploy]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/prod')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Release
+        run: |
+          echo "Release step placeholder for Frontend"
+
+      - name: Job Summary
+        if: always()
+        run: |
+          echo "## 🔍 Job Summary: Frontend - Release" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  monitor-failures:
+    needs: [test, build, deploy, release]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      actions: read
+    steps:
+      - name: Report failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const runId = context.runId;
+            const workflow = context.workflow;
+            const branch = context.ref.replace('refs/heads/', '');
+            const title = `🚨 CI/CD Failure: Frontend - ${branch} branch`;
+
+            const { data: jobs } = await github.rest.actions.listJobsForWorkflowRun({
+              owner,
+              repo,
+              run_id: runId
+            });
+
+            const failedJobs = jobs.jobs.filter(job => job.conclusion === 'failure');
+            const failureDetails = failedJobs.map(job => {
+              const failedSteps = (job.steps || []).filter(step => step.conclusion === 'failure');
+              const stepsText = failedSteps.length
+                ? failedSteps.map(step => `  - ${step.name}`).join('\n')
+                : '  - (no failed steps reported)';
+              return `- **${job.name}** (${job.conclusion})\n${stepsText}`;
+            }).join('\n');
+
+            const { data: milestones } = await github.rest.issues.listMilestones({
+              owner,
+              repo,
+              state: 'open'
+            });
+
+            let failureMilestone = milestones.find(m => m.title.toLowerCase().includes('ci/cd failures'));
+            if (!failureMilestone) {
+              const created = await github.rest.issues.createMilestone({
+                owner,
+                repo,
+                title: 'CI/CD Failures',
+                description: 'Track all CI/CD pipeline failures across the repository'
+              });
+              failureMilestone = created.data;
+            }
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              state: 'all',
+              labels: 'ci-failure'
+            });
+
+            const existing = issues.find(issue => issue.title === title);
+            const body = [
+              `## 🚨 CI/CD Failure Report`,
+              ``,
+              `- **Workflow:** ${workflow}`,
+              `- **Branch:** ${branch}`,
+              `- **Run ID:** ${runId}`,
+              `- **Run URL:** ${context.payload.repository.html_url}/actions/runs/${runId}`,
+              ``,
+              `### Failed Jobs`,
+              failureDetails || '- No failed jobs found',
+              ``,
+              `### Troubleshooting`,
+              `- Review the failed job logs`,
+              `- Re-run the workflow after fixing issues`,
+              ``,
+              `**Completed at:** ${new Date().toISOString()}`
+            ].join('\n');
+
+            if (existing) {
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: existing.number,
+                state: 'open',
+                body,
+                milestone: failureMilestone.number
+              });
+            } else {
+              await github.rest.issues.create({
+                owner,
+                repo,
+                title,
+                body,
+                labels: ['ci-failure', 'frontend', 'bug', 'priority-high'],
+                milestone: failureMilestone.number
+              });
+            }
+name: Frontend CI/CD
+
+on:
+  pull_request:
+    paths:
+      - 'apps/frontend/**'
+      - '.github/workflows/frontend.yml'
+  push:
     branches: [main]
     paths:
       - 'apps/frontend/**'
