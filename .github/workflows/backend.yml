@@ -6,7 +6,7 @@ on:
       - 'apps/backend/**'
       - '.github/workflows/backend.yml'
   push:
-    branches: [main, uat, prod]
+    branches: [main, prod]
     paths:
       - 'apps/backend/**'
       - '.github/workflows/backend.yml'
@@ -59,7 +59,7 @@ jobs:
 
   build:
     needs: test
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/prod')
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/prod')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -82,6 +82,13 @@ jobs:
         with:
           subject-path: apps/backend/target/release/backend
 
+      - name: Upload backend binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-binary
+          path: apps/backend/target/release/backend
+          retention-days: 7
+
       - name: Job Summary
         if: always()
         run: |
@@ -95,7 +102,7 @@ jobs:
 
   docker:
     needs: build
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/prod')
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/prod')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -161,26 +168,107 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
 
-  deploy:
+  deploy-staging:
+    name: Deploy to Staging
     needs: build
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/prod')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    environment: staging
     steps:
-      - name: Deploy
-        run: |
-          echo "Deploying Backend (placeholder)"
+      - name: Download backend binary
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-binary
+
+      - name: Copy backend to VM (staging)
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.VM_IP }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.VM_SSH_PORT || 22 }}
+          source: "backend"
+          target: "/tmp/backend-staging-deploy/"
+
+      - name: Deploy backend (staging systemd)
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VM_IP }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.VM_SSH_PORT || 22 }}
+          script: |
+            set -e
+            APP_NAME="${{ secrets.VM_APP_NAME || 'app' }}"
+            DEPLOY_DIR="/opt/${APP_NAME}/backend/staging"
+            sudo mkdir -p "${DEPLOY_DIR}/bin"
+            sudo cp /tmp/backend-staging-deploy/backend "${DEPLOY_DIR}/bin/backend"
+            sudo chmod +x "${DEPLOY_DIR}/bin/backend"
+            sudo systemctl restart backend-staging || true
+            sudo systemctl status backend-staging --no-pager || true
 
       - name: Job Summary
         if: always()
         run: |
-          echo "## 🔍 Job Summary: Backend - Deploy" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔍 Job Summary: Backend - Deploy Staging" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** staging" >> $GITHUB_STEP_SUMMARY
+          echo "**Path:** /opt/\$APP_NAME/backend/staging" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  deploy-production:
+    name: Deploy to Production
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/prod'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Download backend binary
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-binary
+
+      - name: Copy backend to VM (production)
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.VM_IP }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.VM_SSH_PORT || 22 }}
+          source: "backend"
+          target: "/tmp/backend-production-deploy/"
+
+      - name: Deploy backend (production systemd)
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VM_IP }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.VM_SSH_PORT || 22 }}
+          script: |
+            set -e
+            APP_NAME="${{ secrets.VM_APP_NAME || 'app' }}"
+            DEPLOY_DIR="/opt/${APP_NAME}/backend/production"
+            sudo mkdir -p "${DEPLOY_DIR}/bin"
+            sudo cp /tmp/backend-production-deploy/backend "${DEPLOY_DIR}/bin/backend"
+            sudo chmod +x "${DEPLOY_DIR}/bin/backend"
+            sudo systemctl restart backend-production || true
+            sudo systemctl status backend-production --no-pager || true
+
+      - name: Job Summary
+        if: always()
+        run: |
+          echo "## 🔍 Job Summary: Backend - Deploy Production" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** production" >> $GITHUB_STEP_SUMMARY
+          echo "**Path:** /opt/\$APP_NAME/backend/production" >> $GITHUB_STEP_SUMMARY
           echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
 
   release:
-    needs: [build, deploy, docker]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/prod')
+    needs: [build, docker]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/prod')
     runs-on: ubuntu-latest
     steps:
       - name: Release
@@ -196,7 +284,7 @@ jobs:
           echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
 
   monitor-failures:
-    needs: [test, build, docker, deploy, release]
+    needs: [test, build, docker, deploy-staging, deploy-production, release]
     if: failure()
     runs-on: ubuntu-latest
     permissions:
@@ -292,134 +380,3 @@ jobs:
                 milestone: failureMilestone.number
               });
             }
-name: Backend CI/CD
-
-on:
-  pull_request:
-    paths:
-      - 'apps/backend/**'
-      - '.github/workflows/backend.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'apps/backend/**'
-      - '.github/workflows/backend.yml'
-  workflow_dispatch:
-
-jobs:
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-
-      - name: Cache Cargo dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            apps/backend/target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('apps/backend/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
-      - name: Run tests
-        working-directory: apps/backend
-        run: cargo test
-
-      - name: Check formatting
-        working-directory: apps/backend
-        run: cargo fmt -- --check
-
-      - name: Run clippy
-        working-directory: apps/backend
-        run: cargo clippy -- -D warnings
-
-  build:
-    name: Build
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/prod')
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-
-      - name: Cache Cargo dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            apps/backend/target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('apps/backend/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
-      - name: Build release
-        working-directory: apps/backend
-        run: cargo build --release
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-binary
-          path: apps/backend/target/release/backend
-          retention-days: 7
-
-  docker:
-    name: Build Docker Image
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/prod')
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}/backend
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./apps/backend
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-

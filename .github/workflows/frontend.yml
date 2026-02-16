@@ -6,7 +6,7 @@ on:
       - 'apps/frontend/**'
       - '.github/workflows/frontend.yml'
   push:
-    branches: [main, uat, prod]
+    branches: [main, prod]
     paths:
       - 'apps/frontend/**'
       - '.github/workflows/frontend.yml'
@@ -73,7 +73,7 @@ jobs:
 
   build:
     needs: test
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/prod')
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/prod')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -105,6 +105,18 @@ jobs:
         with:
           subject-path: apps/frontend/build
 
+      - name: Prepare frontend artifact
+        run: |
+          mkdir -p _deploy/frontend-build
+          cp -r apps/frontend/build/* _deploy/frontend-build/
+
+      - name: Upload frontend build
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: _deploy/frontend-build
+          retention-days: 7
+
       - name: Job Summary
         if: always()
         run: |
@@ -116,26 +128,105 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
 
-  deploy:
+  deploy-staging:
+    name: Deploy to Staging
     needs: build
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/prod')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    environment: staging
     steps:
-      - name: Deploy
-        run: |
-          echo "Deploying Frontend (placeholder)"
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+
+      - name: Copy frontend to VM (staging)
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.VM_IP }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.VM_SSH_PORT || 22 }}
+          source: "frontend-build/*"
+          target: "/tmp/frontend-staging-deploy/"
+
+      - name: Deploy frontend (staging systemd)
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VM_IP }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.VM_SSH_PORT || 22 }}
+          script: |
+            set -e
+            APP_NAME="${{ secrets.VM_APP_NAME || 'app' }}"
+            DEPLOY_DIR="/opt/${APP_NAME}/frontend/staging"
+            sudo mkdir -p "${DEPLOY_DIR}"
+            sudo rsync -a --delete /tmp/frontend-staging-deploy/ "${DEPLOY_DIR}/"
+            sudo systemctl restart frontend-staging || true
+            sudo systemctl status frontend-staging --no-pager || true
 
       - name: Job Summary
         if: always()
         run: |
-          echo "## 🔍 Job Summary: Frontend - Deploy" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔍 Job Summary: Frontend - Deploy Staging" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** staging" >> $GITHUB_STEP_SUMMARY
+          echo "**Path:** /opt/\$APP_NAME/frontend/staging" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  deploy-production:
+    name: Deploy to Production
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/prod'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+
+      - name: Copy frontend to VM (production)
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.VM_IP }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.VM_SSH_PORT || 22 }}
+          source: "frontend-build/*"
+          target: "/tmp/frontend-production-deploy/"
+
+      - name: Deploy frontend (production systemd)
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VM_IP }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.VM_SSH_PORT || 22 }}
+          script: |
+            set -e
+            APP_NAME="${{ secrets.VM_APP_NAME || 'app' }}"
+            DEPLOY_DIR="/opt/${APP_NAME}/frontend/production"
+            sudo mkdir -p "${DEPLOY_DIR}"
+            sudo rsync -a --delete /tmp/frontend-production-deploy/ "${DEPLOY_DIR}/"
+            sudo systemctl restart frontend-production || true
+            sudo systemctl status frontend-production --no-pager || true
+
+      - name: Job Summary
+        if: always()
+        run: |
+          echo "## 🔍 Job Summary: Frontend - Deploy Production" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** production" >> $GITHUB_STEP_SUMMARY
+          echo "**Path:** /opt/\$APP_NAME/frontend/production" >> $GITHUB_STEP_SUMMARY
           echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
 
   release:
-    needs: [build, deploy]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/prod')
+    needs: [build]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/prod')
     runs-on: ubuntu-latest
     steps:
       - name: Release
@@ -151,7 +242,7 @@ jobs:
           echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
 
   monitor-failures:
-    needs: [test, build, deploy, release]
+    needs: [test, build, deploy-staging, deploy-production, release]
     if: failure()
     runs-on: ubuntu-latest
     permissions:
@@ -247,89 +338,3 @@ jobs:
                 milestone: failureMilestone.number
               });
             }
-name: Frontend CI/CD
-
-on:
-  pull_request:
-    paths:
-      - 'apps/frontend/**'
-      - '.github/workflows/frontend.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'apps/frontend/**'
-      - '.github/workflows/frontend.yml'
-  workflow_dispatch:
-
-jobs:
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.20.0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-          cache-dependency-path: apps/frontend/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install Playwright browsers
-        working-directory: apps/frontend
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Run linting
-        working-directory: apps/frontend
-        run: pnpm lint
-
-      - name: Run type checking
-        working-directory: apps/frontend
-        run: pnpm check
-
-      - name: Run tests
-        working-directory: apps/frontend
-        run: pnpm test
-
-  build:
-    name: Build
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/prod')
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.20.0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-          cache-dependency-path: apps/frontend/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build frontend
-        working-directory: apps/frontend
-        run: pnpm build
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-build
-          path: apps/frontend/build
-          retention-days: 7
-
