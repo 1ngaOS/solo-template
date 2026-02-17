@@ -1,20 +1,18 @@
 {
-  "name": "solo-template",
+  "name": "__TEMPLATE_APP_NAME_SLUG__",
   "version": "0.1.0",
   "private": true,
-  "description": "A solo monorepo template with backend, frontend, and docs",
+  "description": "__TEMPLATE_APP_DESCRIPTION__",
   "scripts": {
     "frontend": "pnpm --filter frontend",
     "backend": "pnpm --filter backend",
-    "docs": "pnpm --filter docs"
+    "docs": "pnpm --filter docs",
+    "apply-template": "node scripts/apply-template-config.mjs"
   },
-  "keywords": [
-    "monorepo",
-    "template",
-    "sveltekit",
-    "rust",
-    "docusaurus"
-  ],
+  "devDependencies": {
+    "yaml": "^2.6.0"
+  },
+  "keywords": ["__TEMPLATE_KEYWORDS_PLACEHOLDER__"],
   "author": "",
   "license": "MIT",
   "engines": {

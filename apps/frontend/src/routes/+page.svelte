@@ -3,8 +3,8 @@
 </script>
 
 <svelte:head>
-	<title>Solo Monorepo Template</title>
-	<meta name="description" content="A production-ready monorepo template for solo projects" />
+	<title>__TEMPLATE_SEO_TITLE__</title>
+	<meta name="description" content="__TEMPLATE_SEO_DESCRIPTION__" />
 </svelte:head>
 
 <div class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
@@ -12,7 +12,7 @@
 	<header class="bg-white shadow-sm">
 		<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
 			<div class="flex justify-between items-center">
-				<h1 class="text-2xl font-bold text-gray-900">Solo Template</h1>
+				<h1 class="text-2xl font-bold text-gray-900">__TEMPLATE_APP_NAME_SHORT__</h1>
 				<nav class="flex space-x-6">
 					<a href="/" class="text-gray-600 hover:text-gray-900">Home</a>
 					<a href="#features" class="text-gray-600 hover:text-gray-900">Features</a>
@@ -26,10 +26,10 @@
 	<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
 		<div class="text-center mb-16">
 			<h2 class="text-5xl font-bold text-gray-900 mb-6">
-				Solo Monorepo Template
+				__TEMPLATE_APP_NAME__
 			</h2>
 			<p class="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-				A production-ready monorepo template for solo projects featuring backend, frontend, and documentation components.
+				__TEMPLATE_APP_DESCRIPTION__
 			</p>
 			<div class="flex justify-center space-x-4">
 				<a
@@ -142,7 +142,7 @@ make docs-dev</code></pre>
 	<footer class="bg-gray-900 text-gray-300 py-8 mt-16">
 		<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 			<div class="text-center">
-				<p>&copy; 2024 Solo Monorepo Template. Licensed under MIT.</p>
+				<p>&copy; 2024 __TEMPLATE_APP_NAME__. Licensed under MIT.</p>
 			</div>
 		</div>
 	</footer>

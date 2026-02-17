@@ -1,19 +1,19 @@
 # Example systemd unit for backend (production).
-# Copy to /etc/systemd/system/backend-production.service on the VM.
-# Path: /opt/<APP_NAME>/backend/production/bin/backend
+# Copy to /etc/systemd/system/__TEMPLATE_SYSTEMD_BACKEND_PRODUCTION__.service on the VM.
+# Path: /opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/production/bin/backend
 
 [Unit]
-Description=Backend API (production)
+Description=__TEMPLATE_APP_NAME__ Backend API (production)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/opt/app/backend/production/bin/backend
+ExecStart=/opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/production/bin/backend
 Restart=on-failure
 RestartSec=5
-WorkingDirectory=/opt/app/backend/production
-EnvironmentFile=-/etc/default/backend-production
+WorkingDirectory=/opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/production
+EnvironmentFile=-/etc/default/__TEMPLATE_SYSTEMD_BACKEND_PRODUCTION__
 
 [Install]
 WantedBy=multi-user.target

@@ -2,6 +2,34 @@
 
 A production-ready monorepo template for solo projects featuring backend, frontend, and documentation components.
 
+## 📋 Using this template (customize your new repo)
+
+When you create a repo from this template, customize it in one go with a **config file**:
+
+1. **Copy the example config** and edit it with your app details:
+   ```bash
+   cp template.config.example.yaml template.config.yaml
+   # Edit template.config.yaml: app name, description, SEO, logo, repo, deployment (systemd names, env paths)
+   ```
+
+2. **Apply the config** across the repo (package.json, frontend, docs, systemd, CI/CD):
+   ```bash
+   pnpm install   # for the apply-template script
+   pnpm run apply-template
+   ```
+
+3. **Optional**: Add your logo under `apps/frontend/static/` and `apps/docs/static/img/` (paths set in config: `branding.logoPath`, `seo.favicon`, `seo.ogImage`).
+
+The config drives:
+
+- **App identity**: name, short name, description, slug
+- **SEO**: title, description, keywords, favicon, OG image
+- **Branding**: logo path and alt text
+- **Repo**: GitHub org/repo for links and edit URLs
+- **Deployment**: `appName` for `/opt/<name>/...`, systemd service names (staging/production)
+
+See `template.config.example.yaml` for every option. After applying, commit the changes and set up GitHub Environments and secrets as in `infra/systemd/README.md`.
+
 ## 🚀 Features
 
 - **Backend**: Rust-based API server with base endpoints

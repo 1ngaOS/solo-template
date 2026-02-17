@@ -1,20 +1,20 @@
 # Example systemd unit for backend (staging).
-# Copy to /etc/systemd/system/backend-staging.service on the VM.
-# Path: /opt/<APP_NAME>/backend/staging/bin/backend
-# Set APP_NAME via VM_APP_NAME secret (default: app).
+# Copy to /etc/systemd/system/__TEMPLATE_SYSTEMD_BACKEND_STAGING__.service on the VM.
+# Path: /opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/staging/bin/backend
+# Set APP_NAME via VM_APP_NAME secret (default: __TEMPLATE_DEPLOY_APP_NAME__).
 
 [Unit]
-Description=Backend API (staging)
+Description=__TEMPLATE_APP_NAME__ Backend API (staging)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/opt/app/backend/staging/bin/backend
+ExecStart=/opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/staging/bin/backend
 Restart=on-failure
 RestartSec=5
-WorkingDirectory=/opt/app/backend/staging
-EnvironmentFile=-/etc/default/backend-staging
+WorkingDirectory=/opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/staging
+EnvironmentFile=-/etc/default/__TEMPLATE_SYSTEMD_BACKEND_STAGING__
 
 [Install]
 WantedBy=multi-user.target

@@ -1,0 +1,50 @@
+# Template configuration for repos created from this template.
+# Copy to template.config.yaml and fill in your values, then run:
+#   pnpm run apply-template
+#
+# All values here are used to replace placeholders across the repo (name, SEO,
+# deployment paths, systemd service names, docs, etc.).
+
+app:
+  # Display name of your platform or application (used in titles, headers, footer).
+  name: Solo Monorepo Template
+  # Short name for nav bar / compact UI (defaults to app.name if omitted).
+  nameShort: Solo Template
+  # One-line description of what the app does (SEO + marketing).
+  description: A production-ready monorepo template for solo projects
+  # Slug for package names and URLs (lowercase, hyphens). Defaults to name lowercased and hyphenated.
+  nameSlug: solo-template
+
+seo:
+  title: Solo Monorepo Template
+  description: A production-ready monorepo template for solo projects
+  keywords: monorepo, template, sveltekit, rust, docusaurus
+  # Paths relative to frontend static assets (e.g. /logo.svg, /favicon.ico).
+  favicon: /favicon.ico
+  ogImage: /og-image.png
+
+branding:
+  # Logo path for frontend (e.g. /logo.svg). Also used in docs if same.
+  logoPath: /logo.svg
+  # Alt text for the logo.
+  logoAlt: Solo Template Logo
+
+repo:
+  # GitHub org and repo name (for "View on GitHub" and doc edit URLs).
+  organization: your-org
+  name: solo-template
+
+# Deployment and systemd (VM paths and service names).
+deployment:
+  # Value for /opt/<appName>/... and VM_APP_NAME secret. Use a short slug (e.g. app, myapp).
+  appName: app
+  # Systemd unit names (used in CI/CD and example unit files).
+  backendStagingService: backend-staging
+  backendProductionService: backend-production
+  frontendStagingService: frontend-staging
+  frontendProductionService: frontend-production
+
+# Optional: public URLs (for docs and app links in configs).
+urls:
+  app: https://your-app.com
+  docs: https://your-docs-site.com

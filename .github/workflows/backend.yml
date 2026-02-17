@@ -199,13 +199,13 @@ jobs:
           port: ${{ secrets.VM_SSH_PORT || 22 }}
           script: |
             set -e
-            APP_NAME="${{ secrets.VM_APP_NAME || 'app' }}"
+            APP_NAME="${{ secrets.VM_APP_NAME || '__TEMPLATE_DEPLOY_APP_NAME__' }}"
             DEPLOY_DIR="/opt/${APP_NAME}/backend/staging"
             sudo mkdir -p "${DEPLOY_DIR}/bin"
             sudo cp /tmp/backend-staging-deploy/backend "${DEPLOY_DIR}/bin/backend"
             sudo chmod +x "${DEPLOY_DIR}/bin/backend"
-            sudo systemctl restart backend-staging || true
-            sudo systemctl status backend-staging --no-pager || true
+            sudo systemctl restart __TEMPLATE_SYSTEMD_BACKEND_STAGING__ || true
+            sudo systemctl status __TEMPLATE_SYSTEMD_BACKEND_STAGING__ --no-pager || true
 
       - name: Job Summary
         if: always()
@@ -248,13 +248,13 @@ jobs:
           port: ${{ secrets.VM_SSH_PORT || 22 }}
           script: |
             set -e
-            APP_NAME="${{ secrets.VM_APP_NAME || 'app' }}"
+            APP_NAME="${{ secrets.VM_APP_NAME || '__TEMPLATE_DEPLOY_APP_NAME__' }}"
             DEPLOY_DIR="/opt/${APP_NAME}/backend/production"
             sudo mkdir -p "${DEPLOY_DIR}/bin"
             sudo cp /tmp/backend-production-deploy/backend "${DEPLOY_DIR}/bin/backend"
             sudo chmod +x "${DEPLOY_DIR}/bin/backend"
-            sudo systemctl restart backend-production || true
-            sudo systemctl status backend-production --no-pager || true
+            sudo systemctl restart __TEMPLATE_SYSTEMD_BACKEND_PRODUCTION__ || true
+            sudo systemctl status __TEMPLATE_SYSTEMD_BACKEND_PRODUCTION__ --no-pager || true
 
       - name: Job Summary
         if: always()
