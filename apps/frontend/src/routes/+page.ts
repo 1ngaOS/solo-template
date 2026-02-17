@@ -2,8 +2,8 @@ import type { PageLoad } from './$types';
 
 export const load: PageLoad = async () => {
 	return {
-		title: '__TEMPLATE_SEO_TITLE__',
-		description: '__TEMPLATE_SEO_DESCRIPTION__'
+		title: 'Solo Monorepo Template',
+		description: 'A production-ready monorepo template for solo projects'
 	};
 };
 

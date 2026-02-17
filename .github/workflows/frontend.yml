@@ -159,12 +159,12 @@ jobs:
           port: ${{ secrets.VM_SSH_PORT || 22 }}
           script: |
             set -e
-            APP_NAME="${{ secrets.VM_APP_NAME || '__TEMPLATE_DEPLOY_APP_NAME__' }}"
+            APP_NAME="${{ secrets.VM_APP_NAME || 'app' }}"
             DEPLOY_DIR="/opt/${APP_NAME}/frontend/staging"
             sudo mkdir -p "${DEPLOY_DIR}"
             sudo rsync -a --delete /tmp/frontend-staging-deploy/ "${DEPLOY_DIR}/"
-            sudo systemctl restart __TEMPLATE_SYSTEMD_FRONTEND_STAGING__ || true
-            sudo systemctl status __TEMPLATE_SYSTEMD_FRONTEND_STAGING__ --no-pager || true
+            sudo systemctl restart frontend-staging || true
+            sudo systemctl status frontend-staging --no-pager || true
 
       - name: Job Summary
         if: always()
@@ -207,12 +207,12 @@ jobs:
           port: ${{ secrets.VM_SSH_PORT || 22 }}
           script: |
             set -e
-            APP_NAME="${{ secrets.VM_APP_NAME || '__TEMPLATE_DEPLOY_APP_NAME__' }}"
+            APP_NAME="${{ secrets.VM_APP_NAME || 'app' }}"
             DEPLOY_DIR="/opt/${APP_NAME}/frontend/production"
             sudo mkdir -p "${DEPLOY_DIR}"
             sudo rsync -a --delete /tmp/frontend-production-deploy/ "${DEPLOY_DIR}/"
-            sudo systemctl restart __TEMPLATE_SYSTEMD_FRONTEND_PRODUCTION__ || true
-            sudo systemctl status __TEMPLATE_SYSTEMD_FRONTEND_PRODUCTION__ --no-pager || true
+            sudo systemctl restart frontend-production || true
+            sudo systemctl status frontend-production --no-pager || true
 
       - name: Job Summary
         if: always()

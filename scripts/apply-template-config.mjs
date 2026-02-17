@@ -60,7 +60,7 @@ function buildReplacements(config) {
     __TEMPLATE_SEO_TITLE__: seo.title || app.name || 'Solo Monorepo Template',
     __TEMPLATE_SEO_DESCRIPTION__: seo.description || app.description || 'A production-ready monorepo template for solo projects',
     __TEMPLATE_SEO_KEYWORDS__: keywordsStr || 'monorepo, template, sveltekit, rust, docusaurus',
-    __TEMPLATE_KEYWORDS_PLACEHOLDER__: 'REPLACED_BY_SCRIPT',
+    __KEYWORDS_ARRAY_FOR_PACKAGE_JSON__: keywordsArray,
     __TEMPLATE_FAVICON__: seo.favicon || '/favicon.ico',
     __TEMPLATE_OG_IMAGE__: seo.ogImage || '/og-image.png',
     __TEMPLATE_LOGO_PATH__: branding.logoPath || '/logo.svg',
@@ -100,10 +100,20 @@ function applyToFile(filePath, replacements) {
   let content = fs.readFileSync(fullPath, 'utf8');
   let changed = false;
   for (const [placeholder, value] of Object.entries(replacements)) {
+    if (placeholder === '__KEYWORDS_ARRAY_FOR_PACKAGE_JSON__') continue;
     if (content.includes(placeholder)) {
       content = content.split(placeholder).join(value);
       changed = true;
     }
+  }
+  // package.json: replace keywords array placeholder with actual array (valid JSON)
+  if (filePath === 'package.json' && replacements.__KEYWORDS_ARRAY_FOR_PACKAGE_JSON__) {
+    const before = content;
+    content = content.replace(
+      /"keywords":\s*\[[^\]]*\]/,
+      `"keywords": ${replacements.__KEYWORDS_ARRAY_FOR_PACKAGE_JSON__}`
+    );
+    if (content !== before) changed = true;
   }
   if (changed) {
     fs.writeFileSync(fullPath, content, 'utf8');

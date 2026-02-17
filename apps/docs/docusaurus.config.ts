@@ -3,15 +3,15 @@ import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
-  title: '__TEMPLATE_APP_NAME__',
-  tagline: '__TEMPLATE_APP_DESCRIPTION__',
+  title: 'Solo Monorepo Template',
+  tagline: 'A production-ready monorepo template for solo projects',
   favicon: 'img/favicon.ico',
 
-  url: '__TEMPLATE_DOCS_URL__',
+  url: 'https://your-docs-site.com',
   baseUrl: '/',
 
-  organizationName: '__TEMPLATE_REPO_ORG__',
-  projectName: '__TEMPLATE_REPO_NAME__',
+  organizationName: 'your-org',
+  projectName: 'solo-template',
 
   onBrokenLinks: 'throw',
   onBrokenMarkdownLinks: 'warn',
@@ -27,11 +27,11 @@ const config: Config = {
       {
         docs: {
           sidebarPath: './sidebars.ts',
-          editUrl: 'https://github.com/__TEMPLATE_REPO_ORG__/__TEMPLATE_REPO_NAME__/tree/main/apps/docs/',
+          editUrl: 'https://github.com/your-org/solo-template/tree/main/apps/docs/',
         },
         blog: {
           showReadingTime: true,
-          editUrl: 'https://github.com/__TEMPLATE_REPO_ORG__/__TEMPLATE_REPO_NAME__/tree/main/apps/docs/',
+          editUrl: 'https://github.com/your-org/solo-template/tree/main/apps/docs/',
         },
         theme: {
           customCss: './src/css/custom.css',
@@ -42,9 +42,9 @@ const config: Config = {
 
   themeConfig: {
     navbar: {
-      title: '__TEMPLATE_APP_NAME_SHORT__',
+      title: 'Solo Template',
       logo: {
-        alt: '__TEMPLATE_LOGO_ALT__',
+        alt: 'Solo Template Logo',
         src: 'img/logo.svg',
       },
       items: [
@@ -55,7 +55,7 @@ const config: Config = {
           label: 'Docs',
         },
         {
-          href: 'https://github.com/__TEMPLATE_REPO_ORG__/__TEMPLATE_REPO_NAME__',
+          href: 'https://github.com/your-org/solo-template',
           label: 'GitHub',
           position: 'right',
         },
@@ -82,12 +82,12 @@ const config: Config = {
           items: [
             {
               label: 'GitHub',
-              href: 'https://github.com/__TEMPLATE_REPO_ORG__/__TEMPLATE_REPO_NAME__',
+              href: 'https://github.com/your-org/solo-template',
             },
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} __TEMPLATE_APP_NAME__. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} Solo Monorepo Template. Built with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.github,
