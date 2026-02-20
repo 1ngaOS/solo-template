@@ -1,20 +1,23 @@
 # Example systemd unit for frontend (staging).
-# Copy to /etc/systemd/system/frontend-staging.service on the VM.
-# Serves from /opt/app/frontend/staging (e.g. SvelteKit adapter-node build).
+# IMPORTANT: Create a service file named: __TEMPLATE_FRONTEND_STAGING_SERVICE_FILE__
+# (e.g., solo-template-frontend-staging.service) in infra/systemd/ before deploying.
+# The CI/CD workflow expects this file to exist.
+# Copy to /etc/systemd/system/__TEMPLATE_SYSTEMD_FRONTEND_STAGING__.service on the VM.
+# Serves from /opt/__TEMPLATE_DEPLOY_APP_NAME__/frontend/staging (e.g. SvelteKit adapter-node build).
 # Adjust ExecStart if using a static server (nginx/caddy) instead of Node.
 
 [Unit]
-Description=Solo Monorepo Template Frontend (staging)
+Description=__TEMPLATE_APP_NAME__ Frontend (staging)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/app/frontend/staging
+WorkingDirectory=/opt/__TEMPLATE_DEPLOY_APP_NAME__/frontend/staging
 ExecStart=/usr/bin/node index.js
 Restart=on-failure
 RestartSec=5
-EnvironmentFile=-/etc/default/frontend-staging
+EnvironmentFile=-/etc/default/__TEMPLATE_SYSTEMD_FRONTEND_STAGING__
 
 [Install]
 WantedBy=multi-user.target

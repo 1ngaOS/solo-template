@@ -1,6 +1,6 @@
-# Solo Monorepo Template
+# __TEMPLATE_APP_NAME__
 
-A production-ready monorepo template for solo projects featuring backend, frontend, and documentation components.
+__TEMPLATE_APP_DESCRIPTION__
 
 ## 📋 Using this template (customize your new repo)
 
@@ -37,7 +37,7 @@ See `template.config.example.yaml` for every option. After applying, commit the 
 - **Documentation**: Docusaurus documentation site
 - **Shared Modules**: Reusable services and utilities
 - **Monorepo**: Managed with pnpm workspaces
-- **CI/CD**: GitHub Actions workflows ready
+- **CI/CD**: GitHub Actions workflows ready (staging/production environments)
 - **Development**: Makefile commands for quick development
 
 ## 📁 Structure

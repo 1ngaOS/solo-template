@@ -61,8 +61,8 @@ async fn main() {
 /// Root endpoint
 async fn root() -> Json<serde_json::Value> {
     Json(serde_json::json!({
-        "name": "Solo Monorepo Template Backend",
-        "description": "A Rust-based backend API server",
+        "name": "__TEMPLATE_APP_NAME__ Backend",
+        "description": "__TEMPLATE_APP_DESCRIPTION__",
         "version": env!("CARGO_PKG_VERSION"),
         "endpoints": {
             "health": "/health",
@@ -84,7 +84,7 @@ async fn health() -> Json<HealthResponse> {
 /// API information endpoint
 async fn api_info() -> Json<ApiInfo> {
     Json(ApiInfo {
-        name: "Solo Monorepo Template API".to_string(),
+        name: "__TEMPLATE_APP_NAME__ API".to_string(),
         version: "v1".to_string(),
         endpoints: vec![
             "/api/v1/info".to_string(),

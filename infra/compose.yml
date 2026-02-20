@@ -13,7 +13,7 @@ services:
     volumes:
       - ./apps/backend:/app
     networks:
-      - solo-template-network
+      - __TEMPLATE_APP_NAME_SLUG__-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
@@ -21,6 +21,6 @@ services:
       retries: 3
 
 networks:
-  solo-template-network:
+  __TEMPLATE_APP_NAME_SLUG__-network:
     driver: bridge
 

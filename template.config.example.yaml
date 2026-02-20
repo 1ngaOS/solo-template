@@ -43,6 +43,22 @@ deployment:
   backendProductionService: backend-production
   frontendStagingService: frontend-staging
   frontendProductionService: frontend-production
+  # Systemd service file paths (relative to infra/systemd/).
+  # These files are copied during deploy and referenced in workflow triggers.
+  # Defaults to {appNameSlug}-{component}-{env}.service if not specified.
+  frontendStagingServiceFile: solo-template-frontend-staging.service
+  frontendProductionServiceFile: solo-template-frontend-production.service
+  backendStagingServiceFile: solo-template-backend-staging.service
+  backendProductionServiceFile: solo-template-backend-production.service
+  # Frontend ports (for staging and production environments).
+  frontendStagingPort: 6200
+  frontendProductionPort: 6400
+  # Backend API ports (for frontend to connect to).
+  backendStagingPort: 6100
+  backendProductionPort: 6300
+  # Database names (for PostgreSQL).
+  databaseName: app_db
+  databaseTestName: app_db_test
 
 # Optional: public URLs (for docs and app links in configs).
 urls:
