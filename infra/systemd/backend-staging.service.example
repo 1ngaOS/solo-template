@@ -1,20 +1,23 @@
 # Example systemd unit for backend (staging).
-# Copy to /etc/systemd/system/backend-staging.service on the VM.
-# Path: /opt/app/backend/staging/bin/backend
-# Set APP_NAME via VM_APP_NAME secret (default: app).
+# IMPORTANT: Create a service file named: __TEMPLATE_BACKEND_STAGING_SERVICE_FILE__
+# (e.g., solo-template-backend-staging.service) in infra/systemd/ before deploying.
+# The CI/CD workflow expects this file to exist.
+# Copy to /etc/systemd/system/__TEMPLATE_SYSTEMD_BACKEND_STAGING__.service on the VM.
+# Path: /opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/backend
+# Set APP_NAME via VM_APP_NAME secret or use __TEMPLATE_DEPLOY_APP_NAME__.
 
 [Unit]
-Description=Solo Monorepo Template Backend API (staging)
+Description=__TEMPLATE_APP_NAME__ Backend API (staging)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/opt/app/backend/staging/bin/backend
+ExecStart=/opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/backend
 Restart=on-failure
 RestartSec=5
-WorkingDirectory=/opt/app/backend/staging
-EnvironmentFile=-/etc/default/backend-staging
+WorkingDirectory=/opt/__TEMPLATE_DEPLOY_APP_NAME__/backend
+EnvironmentFile=-/etc/default/__TEMPLATE_SYSTEMD_BACKEND_STAGING__
 
 [Install]
 WantedBy=multi-user.target

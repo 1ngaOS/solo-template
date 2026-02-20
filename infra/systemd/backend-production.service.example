@@ -1,19 +1,22 @@
 # Example systemd unit for backend (production).
-# Copy to /etc/systemd/system/backend-production.service on the VM.
-# Path: /opt/app/backend/production/bin/backend
+# IMPORTANT: Create a service file named: __TEMPLATE_BACKEND_PRODUCTION_SERVICE_FILE__
+# (e.g., solo-template-backend-production.service) in infra/systemd/ before deploying.
+# The CI/CD workflow expects this file to exist.
+# Copy to /etc/systemd/system/__TEMPLATE_SYSTEMD_BACKEND_PRODUCTION__.service on the VM.
+# Path: /opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/backend
 
 [Unit]
-Description=Solo Monorepo Template Backend API (production)
+Description=__TEMPLATE_APP_NAME__ Backend API (production)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/opt/app/backend/production/bin/backend
+ExecStart=/opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/backend
 Restart=on-failure
 RestartSec=5
-WorkingDirectory=/opt/app/backend/production
-EnvironmentFile=-/etc/default/backend-production
+WorkingDirectory=/opt/__TEMPLATE_DEPLOY_APP_NAME__/backend
+EnvironmentFile=-/etc/default/__TEMPLATE_SYSTEMD_BACKEND_PRODUCTION__
 
 [Install]
 WantedBy=multi-user.target

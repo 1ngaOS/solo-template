@@ -2,381 +2,1219 @@ name: Backend CI/CD
 
 on:
   pull_request:
+    types: [opened, synchronize, closed]
     paths:
       - 'apps/backend/**'
       - '.github/workflows/backend.yml'
-  push:
-    branches: [main, prod]
-    paths:
-      - 'apps/backend/**'
-      - '.github/workflows/backend.yml'
+      - 'infra/scripts/ensure-db.sh'
+      - 'infra/systemd/__TEMPLATE_BACKEND_STAGING_SERVICE_FILE__'
+      - 'infra/systemd/__TEMPLATE_BACKEND_PRODUCTION_SERVICE_FILE__'
   workflow_dispatch:
 
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  format:
+    name: Format
+    runs-on: self-hosted
+    if: |
+      github.event.pull_request.merged == false &&
+      (github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'uat' || github.event.pull_request.base.ref == 'prod')
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Setup Rust
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cargo
+            .rustup
+            apps/backend/target/
+          key: ${{ runner.os }}-cargo-format-${{ hashFiles('apps/backend/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-format-${{ hashFiles('apps/backend/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-format-
+            ${{ runner.os }}-cargo-
+
+      - name: Check for existing Rust
+        id: rust
+        run: |
+          set -e
+          if ! command -v cargo >/dev/null 2>&1 || ! command -v rustc >/dev/null 2>&1; then
+            echo "available=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          # Dependencies (e.g. home) require edition2024; need Rust >= 1.85
+          RUSTV=$(rustc --version | grep -oE '[0-9]+\.[0-9]+' | head -1)
+          [ -n "$RUSTV" ] || { echo "available=false" >> $GITHUB_OUTPUT; exit 0; }
+          MAJOR=$(echo "$RUSTV" | cut -d. -f1)
+          MINOR=$(echo "$RUSTV" | cut -d. -f2)
+          if [ -n "$MAJOR" ] && [ -n "$MINOR" ] && { [ "$MAJOR" -gt 1 ] || { [ "$MAJOR" -eq 1 ] && [ "$MINOR" -ge 85 ]; }; }; then
+            echo "available=true" >> $GITHUB_OUTPUT
+            echo "Using existing Rust: $(rustc --version)"
+          else
+            echo "available=false" >> $GITHUB_OUTPUT
+            echo "Existing Rust $RUSTV is too old (need >= 1.85 for edition2024), will install stable."
+          fi
+
+      - name: Set job-local Rust env
+        if: steps.rust.outputs.available != 'true'
+        run: |
+          echo "CARGO_HOME=$GITHUB_WORKSPACE/.cargo" >> $GITHUB_ENV
+          echo "RUSTUP_HOME=$GITHUB_WORKSPACE/.rustup" >> $GITHUB_ENV
+          echo "PATH=$GITHUB_WORKSPACE/.cargo/bin:$PATH" >> $GITHUB_ENV
+        # Isolate Rust install per job so shared ~/.rustup is not used (avoids rename failures on self-hosted).
+
+      - name: Prepare rustup (clean job-local toolchain and downloads)
+        if: steps.rust.outputs.available != 'true'
+        run: |
+          rm -rf "$RUSTUP_HOME/downloads" "$RUSTUP_HOME/toolchains/stable-x86_64-unknown-linux-gnu" "$RUSTUP_HOME/tmp" 2>/dev/null || true
+          mkdir -p "$RUSTUP_HOME/downloads"
+
+      - name: Install Rust
+        if: steps.rust.outputs.available != 'true'
+        env:
+          RUSTUP_INIT_SKIP_PATH_CHECK: "yes"
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          toolchain: stable
 
-      - name: Format check
+      - name: Add rustfmt and clippy components
+        if: steps.rust.outputs.available != 'true'
+        run: rustup component add rustfmt clippy
+
+      - name: Run format check
         working-directory: apps/backend
         run: cargo fmt -- --check
 
-      - name: Lint
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## ✨ Format Job Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Job:** Format" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Backend" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Completed Steps" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Checkout repository" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Cache Cargo dependencies" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Install Rust" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Run format check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  lint:
+    name: Lint
+    runs-on: self-hosted
+    needs: format
+    if: |
+      github.event.pull_request.merged == false &&
+      (github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'uat' || github.event.pull_request.base.ref == 'prod')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cargo
+            .rustup
+            apps/backend/target/
+          key: ${{ runner.os }}-cargo-lint-${{ hashFiles('apps/backend/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-lint-${{ hashFiles('apps/backend/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-lint-
+            ${{ runner.os }}-cargo-
+
+      - name: Check for existing Rust
+        id: rust
+        run: |
+          set -e
+          if ! command -v cargo >/dev/null 2>&1 || ! command -v rustc >/dev/null 2>&1; then
+            echo "available=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          # Dependencies (e.g. home) require edition2024; need Rust >= 1.85
+          RUSTV=$(rustc --version | grep -oE '[0-9]+\.[0-9]+' | head -1)
+          [ -n "$RUSTV" ] || { echo "available=false" >> $GITHUB_OUTPUT; exit 0; }
+          MAJOR=$(echo "$RUSTV" | cut -d. -f1)
+          MINOR=$(echo "$RUSTV" | cut -d. -f2)
+          if [ -n "$MAJOR" ] && [ -n "$MINOR" ] && { [ "$MAJOR" -gt 1 ] || { [ "$MAJOR" -eq 1 ] && [ "$MINOR" -ge 85 ]; }; }; then
+            echo "available=true" >> $GITHUB_OUTPUT
+            echo "Using existing Rust: $(rustc --version)"
+          else
+            echo "available=false" >> $GITHUB_OUTPUT
+            echo "Existing Rust $RUSTV is too old (need >= 1.85 for edition2024), will install stable."
+          fi
+
+      - name: Set job-local Rust env
+        if: steps.rust.outputs.available != 'true'
+        run: |
+          echo "CARGO_HOME=$GITHUB_WORKSPACE/.cargo" >> $GITHUB_ENV
+          echo "RUSTUP_HOME=$GITHUB_WORKSPACE/.rustup" >> $GITHUB_ENV
+          echo "PATH=$GITHUB_WORKSPACE/.cargo/bin:$PATH" >> $GITHUB_ENV
+
+      - name: Prepare rustup (clean job-local toolchain and downloads)
+        if: steps.rust.outputs.available != 'true'
+        run: |
+          rm -rf "$RUSTUP_HOME/downloads" "$RUSTUP_HOME/toolchains/stable-x86_64-unknown-linux-gnu" "$RUSTUP_HOME/tmp" 2>/dev/null || true
+          mkdir -p "$RUSTUP_HOME/downloads"
+
+      - name: Install Rust
+        if: steps.rust.outputs.available != 'true'
+        env:
+          RUSTUP_INIT_SKIP_PATH_CHECK: "yes"
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Add rustfmt and clippy components
+        if: steps.rust.outputs.available != 'true'
+        run: rustup component add rustfmt clippy
+
+      - name: Run linter
         working-directory: apps/backend
         run: cargo clippy -- -D warnings
 
-      - name: Check
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## 🧹 Lint Job Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Job:** Lint" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Backend" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Completed Steps" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Checkout repository" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Cache Cargo dependencies" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Install Rust" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Run linter" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  check:
+    name: Check
+    runs-on: self-hosted
+    needs: [lint]
+    if: |
+      github.event.pull_request.merged == false &&
+      (github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'uat' || github.event.pull_request.base.ref == 'prod')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cargo
+            .rustup
+            apps/backend/target/
+          key: ${{ runner.os }}-cargo-check-${{ hashFiles('apps/backend/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-check-${{ hashFiles('apps/backend/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-check-
+            ${{ runner.os }}-cargo-
+
+      - name: Check for existing Rust
+        id: rust
+        run: |
+          set -e
+          if ! command -v cargo >/dev/null 2>&1 || ! command -v rustc >/dev/null 2>&1; then
+            echo "available=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          # Dependencies (e.g. home) require edition2024; need Rust >= 1.85
+          RUSTV=$(rustc --version | grep -oE '[0-9]+\.[0-9]+' | head -1)
+          [ -n "$RUSTV" ] || { echo "available=false" >> $GITHUB_OUTPUT; exit 0; }
+          MAJOR=$(echo "$RUSTV" | cut -d. -f1)
+          MINOR=$(echo "$RUSTV" | cut -d. -f2)
+          if [ -n "$MAJOR" ] && [ -n "$MINOR" ] && { [ "$MAJOR" -gt 1 ] || { [ "$MAJOR" -eq 1 ] && [ "$MINOR" -ge 85 ]; }; }; then
+            echo "available=true" >> $GITHUB_OUTPUT
+            echo "Using existing Rust: $(rustc --version)"
+          else
+            echo "available=false" >> $GITHUB_OUTPUT
+            echo "Existing Rust $RUSTV is too old (need >= 1.85 for edition2024), will install stable."
+          fi
+
+      - name: Set job-local Rust env
+        if: steps.rust.outputs.available != 'true'
+        run: |
+          echo "CARGO_HOME=$GITHUB_WORKSPACE/.cargo" >> $GITHUB_ENV
+          echo "RUSTUP_HOME=$GITHUB_WORKSPACE/.rustup" >> $GITHUB_ENV
+          echo "PATH=$GITHUB_WORKSPACE/.cargo/bin:$PATH" >> $GITHUB_ENV
+
+      - name: Prepare rustup (clean job-local toolchain and downloads)
+        if: steps.rust.outputs.available != 'true'
+        run: |
+          rm -rf "$RUSTUP_HOME/downloads" "$RUSTUP_HOME/toolchains/stable-x86_64-unknown-linux-gnu" "$RUSTUP_HOME/tmp" 2>/dev/null || true
+          mkdir -p "$RUSTUP_HOME/downloads"
+
+      - name: Install Rust
+        if: steps.rust.outputs.available != 'true'
+        env:
+          RUSTUP_INIT_SKIP_PATH_CHECK: "yes"
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Add rustfmt and clippy components
+        if: steps.rust.outputs.available != 'true'
+        run: rustup component add rustfmt clippy
+
+      - name: Run build check
         working-directory: apps/backend
         run: cargo check
 
-      - name: Test
-        working-directory: apps/backend
-        run: cargo test
-
-      - name: Job Summary
+      - name: Write job summary
         if: always()
         run: |
-          echo "## 🔍 Job Summary: Backend - Test" >> $GITHUB_STEP_SUMMARY
+          echo "## ✅ Build Check Job Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Job:** Check" >> $GITHUB_STEP_SUMMARY
           echo "**Component:** Backend" >> $GITHUB_STEP_SUMMARY
-          echo "**Technology:** Rust, Axum" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Steps Executed" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Checkout code" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Rustfmt check" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Clippy lint" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Cargo check" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Cargo test" >> $GITHUB_STEP_SUMMARY
+          echo "### Completed Steps" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Checkout repository" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Cache Cargo dependencies" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Install Rust" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Run build check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  test:
+    name: Test
+    runs-on: self-hosted
+    needs: [check]
+    if: github.event.pull_request.merged == false
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: __TEMPLATE_DATABASE_NAME__
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/__TEMPLATE_DATABASE_TEST_NAME__
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cargo
+            .rustup
+            apps/backend/target/
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('apps/backend/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-test-${{ hashFiles('apps/backend/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-test-
+            ${{ runner.os }}-cargo-
+
+      - name: Check for existing Rust
+        id: rust
+        run: |
+          set -e
+          if ! command -v cargo >/dev/null 2>&1 || ! command -v rustc >/dev/null 2>&1; then
+            echo "available=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          # Dependencies (e.g. home) require edition2024; need Rust >= 1.85
+          RUSTV=$(rustc --version | grep -oE '[0-9]+\.[0-9]+' | head -1)
+          [ -n "$RUSTV" ] || { echo "available=false" >> $GITHUB_OUTPUT; exit 0; }
+          MAJOR=$(echo "$RUSTV" | cut -d. -f1)
+          MINOR=$(echo "$RUSTV" | cut -d. -f2)
+          if [ -n "$MAJOR" ] && [ -n "$MINOR" ] && { [ "$MAJOR" -gt 1 ] || { [ "$MAJOR" -eq 1 ] && [ "$MINOR" -ge 85 ]; }; }; then
+            echo "available=true" >> $GITHUB_OUTPUT
+            echo "Using existing Rust: $(rustc --version)"
+          else
+            echo "available=false" >> $GITHUB_OUTPUT
+            echo "Existing Rust $RUSTV is too old (need >= 1.85 for edition2024), will install stable."
+          fi
+
+      - name: Set job-local Rust env
+        if: steps.rust.outputs.available != 'true'
+        run: |
+          echo "CARGO_HOME=$GITHUB_WORKSPACE/.cargo" >> $GITHUB_ENV
+          echo "RUSTUP_HOME=$GITHUB_WORKSPACE/.rustup" >> $GITHUB_ENV
+          echo "PATH=$GITHUB_WORKSPACE/.cargo/bin:$PATH" >> $GITHUB_ENV
+
+      - name: Prepare rustup (clean job-local toolchain and downloads)
+        if: steps.rust.outputs.available != 'true'
+        run: |
+          rm -rf "$RUSTUP_HOME/downloads" "$RUSTUP_HOME/toolchains/stable-x86_64-unknown-linux-gnu" "$RUSTUP_HOME/tmp" 2>/dev/null || true
+          mkdir -p "$RUSTUP_HOME/downloads"
+
+      - name: Install Rust
+        if: steps.rust.outputs.available != 'true'
+        env:
+          RUSTUP_INIT_SKIP_PATH_CHECK: "yes"
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Add rustfmt and clippy components
+        if: steps.rust.outputs.available != 'true'
+        run: rustup component add rustfmt clippy
+
+      - name: Install PostgreSQL client
+        run: |
+          # Install PostgreSQL client tools for database operations
+          if command -v apt-get > /dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y postgresql-client || true
+          elif command -v yum > /dev/null 2>&1; then
+            sudo yum install -y postgresql || true
+          elif command -v brew > /dev/null 2>&1; then
+            brew install postgresql@16 || brew install postgresql || true
+          fi
+
+      - name: Wait for PostgreSQL to be ready
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          echo "Waiting for PostgreSQL to be ready..."
+          for i in {1..60}; do
+            # Try to connect using psql if available, otherwise use a simple TCP connection test
+            if command -v psql > /dev/null 2>&1; then
+              if psql -h localhost -p 5432 -U postgres -d postgres -c "SELECT 1" > /dev/null 2>&1; then
+                echo "PostgreSQL is ready!"
+                break
+              fi
+            else
+              # Fallback: test TCP connection
+              if timeout 1 bash -c "echo > /dev/tcp/localhost/5432" 2>/dev/null; then
+                echo "PostgreSQL port is open, assuming ready..."
+                sleep 2
+                break
+              fi
+            fi
+            if [ $i -eq 60 ]; then
+              echo "ERROR: PostgreSQL did not become ready within 60 seconds"
+              exit 1
+            fi
+            echo "Waiting for PostgreSQL... ($i/60)"
+            sleep 1
+          done
+
+      - name: Create test database
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          echo "Creating test database '__TEMPLATE_DATABASE_TEST_NAME__'..."
+          if command -v psql > /dev/null 2>&1; then
+            # Connect to 'postgres' database (always exists) and create test database if it doesn't exist
+            psql -h localhost -p 5432 -U postgres -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = '__TEMPLATE_DATABASE_TEST_NAME__'" | grep -q 1 || psql -h localhost -p 5432 -U postgres -d postgres -c "CREATE DATABASE __TEMPLATE_DATABASE_TEST_NAME__;"
+            echo "Test database '__TEMPLATE_DATABASE_TEST_NAME__' is ready"
+          else
+            echo "WARNING: psql not available. Attempting to create database using migrations..."
+            echo "If tests fail with 'database does not exist', install PostgreSQL client tools"
+          fi
+
+      - name: Run tests
+        working-directory: apps/backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/__TEMPLATE_DATABASE_TEST_NAME__
+        run: cargo test -- --include-ignored --test-threads=1
+
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## ✅ Test Job Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Job:** Test" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Backend" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Test Environment" >> $GITHUB_STEP_SUMMARY
+          echo "- **Database:** PostgreSQL 16 (service container)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Database URL:** \`postgresql://postgres:***@localhost:5432/__TEMPLATE_DATABASE_TEST_NAME__\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Completed Steps" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Checkout repository" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Cache Cargo dependencies" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Install Rust" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Install PostgreSQL client" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Wait for PostgreSQL to be ready" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Create test database" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Run tests" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  version:
+    name: Bump Version
+    runs-on: self-hosted
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Pull latest changes
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.ref }}
+          git checkout ${{ github.event.pull_request.base.ref }}
+          git pull origin ${{ github.event.pull_request.base.ref }} --rebase || git pull origin ${{ github.event.pull_request.base.ref }} --no-rebase
+
+      - name: Get current version from Cargo.toml
+        id: current_version
+        working-directory: apps/backend
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | sed 's/.*"\([^"]*\)".*/\1/')
+          if [ -z "$VERSION" ]; then
+            echo "Error: Version is empty in Cargo.toml"
+            exit 1
+          fi
+          echo "current_version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $VERSION"
+
+      - name: Bump version in Cargo.toml
+        id: new_version
+        working-directory: apps/backend
+        run: |
+          CURRENT_VERSION="${{ steps.current_version.outputs.current_version }}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+          sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" Cargo.toml
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Commit version changes
+        run: |
+          git add apps/backend/Cargo.toml
+          if git diff --staged --quiet; then
+            echo "No version changes to commit"
+          else
+            git commit -m "chore(backend): bump version to ${{ steps.new_version.outputs.new_version }} [skip ci]"
+          fi
+
+      - name: Create git tag
+        run: |
+          if git rev-parse "backend-v${{ steps.new_version.outputs.new_version }}" >/dev/null 2>&1; then
+            echo "Tag backend-v${{ steps.new_version.outputs.new_version }} already exists"
+          else
+            git tag -a "backend-v${{ steps.new_version.outputs.new_version }}" -m "Release backend v${{ steps.new_version.outputs.new_version }}"
+          fi
+
+      - name: Push changes and tags
+        run: |
+          set -e
+          BRANCH="${{ github.event.pull_request.base.ref }}"
+          PUSHED=
+          for _ in 1 2 3; do
+            git fetch origin "$BRANCH"
+            git checkout "$BRANCH"
+            git pull origin "$BRANCH" --rebase || git pull origin "$BRANCH" --no-rebase
+            if [ -z "$(git log origin/$BRANCH..HEAD 2>/dev/null)" ]; then
+              echo "No new commits to push"
+              PUSHED=1
+              break
+            fi
+            if git push origin HEAD:"$BRANCH" --force-with-lease || git push origin HEAD:"$BRANCH"; then
+              PUSHED=1
+              break
+            fi
+            echo "Push rejected (remote moved), retrying after pull..."
+          done
+          if [ -z "$PUSHED" ]; then
+            echo "ERROR: Failed to push after 3 attempts"
+            exit 1
+          fi
+          git push origin --tags || true
+
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## 📦 Version Bump Job Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Job:** Bump Version" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Backend" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Version Information" >> $GITHUB_STEP_SUMMARY
+          echo "- **Current Version:** ${{ steps.current_version.outputs.current_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **New Version:** ${{ steps.new_version.outputs.new_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
 
   build:
-    needs: test
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/prod')
-    runs-on: ubuntu-latest
+    name: Build
+    runs-on: self-hosted
+    needs: version
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true
     permissions:
       contents: read
       id-token: write
-      attestations: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
 
-      - name: Setup Rust
+      - name: Pull latest changes (including version bump)
+        run: git pull origin ${{ github.ref_name }} || true
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cargo
+            .rustup
+            apps/backend/target/
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('apps/backend/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-${{ hashFiles('apps/backend/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-build-
+            ${{ runner.os }}-cargo-
+
+      - name: Check for existing Rust
+        id: rust 
+        run: |
+          set -e
+          if ! command -v cargo >/dev/null 2>&1 || ! command -v rustc >/dev/null 2>&1; then
+            echo "available=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          # Dependencies (e.g. home) require edition2024; need Rust >= 1.85
+          RUSTV=$(rustc --version | grep -oE '[0-9]+\.[0-9]+' | head -1)
+          [ -n "$RUSTV" ] || { echo "available=false" >> $GITHUB_OUTPUT; exit 0; }
+          MAJOR=$(echo "$RUSTV" | cut -d. -f1)
+          MINOR=$(echo "$RUSTV" | cut -d. -f2)
+          if [ -n "$MAJOR" ] && [ -n "$MINOR" ] && { [ "$MAJOR" -gt 1 ] || { [ "$MAJOR" -eq 1 ] && [ "$MINOR" -ge 85 ]; }; }; then
+            echo "available=true" >> $GITHUB_OUTPUT
+            echo "Using existing Rust: $(rustc --version)"
+          else
+            echo "available=false" >> $GITHUB_OUTPUT
+            echo "Existing Rust $RUSTV is too old (need >= 1.85 for edition2024), will install stable."
+          fi
+
+      - name: Set job-local Rust env
+        if: steps.rust.outputs.available != 'true'
+        run: |
+          echo "CARGO_HOME=$GITHUB_WORKSPACE/.cargo" >> $GITHUB_ENV
+          echo "RUSTUP_HOME=$GITHUB_WORKSPACE/.rustup" >> $GITHUB_ENV
+          echo "PATH=$GITHUB_WORKSPACE/.cargo/bin:$PATH" >> $GITHUB_ENV
+
+      - name: Prepare rustup (clean job-local toolchain and downloads)
+        if: steps.rust.outputs.available != 'true'
+        run: |
+          rm -rf "$RUSTUP_HOME/downloads" "$RUSTUP_HOME/toolchains/stable-x86_64-unknown-linux-gnu" "$RUSTUP_HOME/tmp" 2>/dev/null || true
+          mkdir -p "$RUSTUP_HOME/downloads"
+
+      - name: Install Rust
+        if: steps.rust.outputs.available != 'true'
+        env:
+          RUSTUP_INIT_SKIP_PATH_CHECK: "yes"
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          toolchain: stable
 
-      - name: Build
-        working-directory: apps/backend
-        run: cargo build --release
-
-      - name: Attest build provenance
-        uses: actions/attest-build-provenance@v3
-        with:
-          subject-path: apps/backend/target/release/backend
-
-      - name: Upload backend binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-binary
-          path: apps/backend/target/release/backend
-          retention-days: 7
-
-      - name: Job Summary
-        if: always()
-        run: |
-          echo "## 🔍 Job Summary: Backend - Build" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Component:** Backend" >> $GITHUB_STEP_SUMMARY
-          echo "**Build Output:** apps/backend/target/release/backend" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-
-  docker:
-    needs: build
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/prod')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    env:
-      IMAGE_NAME: ghcr.io/${{ github.repository }}/backend
-    steps:
-      - uses: actions/checkout@v4
+      - name: Add rustfmt and clippy components
+        if: steps.rust.outputs.available != 'true'
+        run: rustup component add rustfmt clippy
 
       - name: Get version from Cargo.toml
         id: version
         working-directory: apps/backend
         run: |
-          VERSION=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          VERSION=$(grep '^version = ' Cargo.toml | sed 's/.*"\([^"]*\)".*/\1/')
           if [ -z "$VERSION" ]; then
             echo "Error: Version is empty in Cargo.toml"
-            grep -A 2 -B 2 '^version' Cargo.toml || echo "Version line not found"
             exit 1
           fi
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            echo "Error: Invalid version format: $VERSION (expected MAJOR.MINOR.PATCH)"
-            exit 1
-          fi
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "major=$MAJOR" >> $GITHUB_OUTPUT
-          echo "minor=$MINOR" >> $GITHUB_OUTPUT
-          echo "patch=$PATCH" >> $GITHUB_OUTPUT
-          echo "Version: $VERSION"
+          echo "Building version: $VERSION"
 
-      - name: Login to GHCR
+      - name: Build release binary
+        working-directory: apps/backend
+        run: cargo build --release
+
+      - name: Determine deployment environment
+        id: env
+        run: |
+          BRANCH="${{ github.event.pull_request.base.ref }}"
+          APP_NAME="${{ secrets.VM_APP_NAME || '__TEMPLATE_DEPLOY_APP_NAME__' }}"
+          if [ "$BRANCH" = "prod" ]; then
+            echo "environment=production" >> $GITHUB_OUTPUT
+            echo "service_file=__TEMPLATE_BACKEND_PRODUCTION_SERVICE_FILE__" >> $GITHUB_OUTPUT
+            echo "service_name=__TEMPLATE_SYSTEMD_BACKEND_PRODUCTION__" >> $GITHUB_OUTPUT
+            echo "port=__TEMPLATE_BACKEND_PRODUCTION_PORT__" >> $GITHUB_OUTPUT
+          else
+            echo "environment=staging" >> $GITHUB_OUTPUT
+            echo "service_file=__TEMPLATE_BACKEND_STAGING_SERVICE_FILE__" >> $GITHUB_OUTPUT
+            echo "service_name=__TEMPLATE_SYSTEMD_BACKEND_STAGING__" >> $GITHUB_OUTPUT
+            echo "port=__TEMPLATE_BACKEND_STAGING_PORT__" >> $GITHUB_OUTPUT
+          fi
+          echo "Deploying to: ${{ steps.env.outputs.environment }}"
+          echo "Service file: ${{ steps.env.outputs.service_file }}"
+          echo "Service name: ${{ steps.env.outputs.service_name }}"
+          echo "Port: ${{ steps.env.outputs.port }}"
+
+      - name: Package backend for VM deploy
+        run: |
+          mkdir -p deploy/backend
+          # Normalize migration line endings (LF) when migrations exist (so checksums match across environments)
+          if [ -d apps/backend/migrations ]; then
+            for f in apps/backend/migrations/*.sql; do
+              [ -f "$f" ] || break
+              sed -i 's/\r$//' "$f"
+              [ -n "$(tail -c1 "$f" 2>/dev/null)" ] && echo >> "$f" || true
+            done
+            cp -r apps/backend/migrations deploy/backend/
+          else
+            mkdir -p deploy/backend/migrations
+          fi
+          cp apps/backend/target/release/backend deploy/backend/
+          cp infra/systemd/${{ steps.env.outputs.service_file }} deploy/backend/${{ steps.env.outputs.service_file }}
+          cp infra/scripts/ensure-db.sh deploy/backend/
+          cp infra/scripts/sync-all-migration-checksums.sh deploy/backend/ 2>/dev/null || true
+          cp infra/scripts/wipe-schema-on-vm.sh deploy/backend/ 2>/dev/null || true
+          cp infra/scripts/emergency-wipe-and-fix.sh deploy/backend/ 2>/dev/null || true
+          chmod +x deploy/backend/ensure-db.sh
+          [ -f deploy/backend/sync-all-migration-checksums.sh ] && chmod +x deploy/backend/sync-all-migration-checksums.sh || true
+          [ -f deploy/backend/wipe-schema-on-vm.sh ] && chmod +x deploy/backend/wipe-schema-on-vm.sh || true
+          [ -f deploy/backend/emergency-wipe-and-fix.sh ] && chmod +x deploy/backend/emergency-wipe-and-fix.sh || true
+          tar -czvf backend-deploy.tar.gz -C deploy backend
+
+      - name: Upload deploy artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-deploy-v${{ steps.version.outputs.version }}
+          path: backend-deploy.tar.gz
+
+      - name: Upload binary artifact for Docker
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-binary-v${{ steps.version.outputs.version }}
+          path: apps/backend/target/release/backend
+          retention-days: 1
+
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## 🏗️ Build Job Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Job:** Build" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Backend" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Information" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Binary:** \`backend\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  docker:
+    name: Build Docker Image
+    runs-on: self-hosted
+    needs: [build, version]
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Get version from Cargo.toml
+        id: version
+        working-directory: apps/backend
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | sed 's/.*"\([^"]*\)".*/\1/')
+          if [ -z "$VERSION" ]; then
+            echo "Error: Version is empty in Cargo.toml"
+            exit 1
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Docker image version: $VERSION"
+
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-binary-v${{ steps.version.outputs.version }}
+          path: apps/backend/bin/
+
+      - name: Verify binary exists
+        run: |
+          if [ ! -f "apps/backend/bin/backend" ]; then
+            echo "Error: Binary artifact not found"
+            ls -la apps/backend/bin/ || true
+            exit 1
+          fi
+          chmod +x apps/backend/bin/backend
+          file apps/backend/bin/backend
+          ls -lh apps/backend/bin/backend
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Set lowercase repository for image name
+        id: repo
+        run: |
+          REPO_LOWER=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
+          echo "repo=$REPO_LOWER" >> $GITHUB_OUTPUT
 
-      - name: Build and push image
+      - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: apps/backend
           file: apps/backend/Dockerfile
           push: true
           tags: |
-            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
-            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }}.${{ steps.version.outputs.patch }}
-            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }}
-            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major }}
-            ${{ env.IMAGE_NAME }}:${{ github.ref_name }}
-            ${{ env.IMAGE_NAME }}:${{ github.sha }}
-            ${{ github.ref == 'refs/heads/main' && format('{0}:latest', env.IMAGE_NAME) || '' }}
+            ghcr.io/${{ steps.repo.outputs.repo }}/backend:${{ steps.version.outputs.version }}
+            ghcr.io/${{ steps.repo.outputs.repo }}/backend:${{ github.ref_name }}
+            ghcr.io/${{ steps.repo.outputs.repo }}/backend:${{ github.sha }}
+            ghcr.io/${{ steps.repo.outputs.repo }}/backend:latest
 
-      - name: Job Summary
+      - name: Write job summary
         if: always()
         run: |
-          echo "## 🔍 Job Summary: Backend - Docker" >> $GITHUB_STEP_SUMMARY
+          echo "## 🐳 Docker Build Job Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Image:** ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Job:** Build Docker Image" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Backend" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Docker Information" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image:** ghcr.io/${{ github.repository }}/backend:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
 
-  deploy-staging:
-    name: Deploy to Staging
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    environment: staging
+  get-version:
+    name: Get Version
+    runs-on: self-hosted
+    needs: [version, build, docker]
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - name: Download backend binary
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
         with:
-          name: backend-binary
+          ref: ${{ github.ref }}
+          fetch-depth: 0
 
-      - name: Copy backend to VM (staging)
-        uses: appleboy/scp-action@v1
-        with:
-          host: ${{ secrets.VM_IP }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.VM_SSH_PORT || 22 }}
-          source: "backend"
-          target: "/tmp/backend-staging-deploy/"
+      - name: Get version from Cargo.toml
+        id: version
+        working-directory: apps/backend
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | sed 's/.*"\([^"]*\)".*/\1/')
+          if [ -z "$VERSION" ]; then
+            echo "Error: Version is empty in Cargo.toml"
+            exit 1
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
 
-      - name: Deploy backend (staging systemd)
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.VM_IP }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.VM_SSH_PORT || 22 }}
-          script: |
-            set -e
-            APP_NAME="${{ secrets.VM_APP_NAME || '__TEMPLATE_DEPLOY_APP_NAME__' }}"
-            DEPLOY_DIR="/opt/${APP_NAME}/backend/staging"
-            sudo mkdir -p "${DEPLOY_DIR}/bin"
-            sudo cp /tmp/backend-staging-deploy/backend "${DEPLOY_DIR}/bin/backend"
-            sudo chmod +x "${DEPLOY_DIR}/bin/backend"
-            sudo systemctl restart __TEMPLATE_SYSTEMD_BACKEND_STAGING__ || true
-            sudo systemctl status __TEMPLATE_SYSTEMD_BACKEND_STAGING__ --no-pager || true
-
-      - name: Job Summary
+      - name: Write job summary
         if: always()
         run: |
-          echo "## 🔍 Job Summary: Backend - Deploy Staging" >> $GITHUB_STEP_SUMMARY
+          echo "## 📋 Get Version Job Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Environment:** staging" >> $GITHUB_STEP_SUMMARY
-          echo "**Path:** /opt/\$APP_NAME/backend/staging" >> $GITHUB_STEP_SUMMARY
+          echo "**Job:** Get Version" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Backend" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
 
-  deploy-production:
-    name: Deploy to Production
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/prod'
-    runs-on: ubuntu-latest
-    environment: production
+  deploy:
+    name: Deploy (systemd)
+    runs-on: self-hosted
+    needs: [get-version, build]
+    environment: ${{ github.event.pull_request.base.ref == 'prod' && 'production' || 'staging' }}
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      (github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'uat' || github.event.pull_request.base.ref == 'prod')
+    permissions:
+      contents: read
     steps:
-      - name: Download backend binary
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install PostgreSQL client (for wipe)
+        if: vars.WIPE_DB == 'true'
+        run: |
+          if command -v apt-get > /dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          elif command -v yum > /dev/null 2>&1; then
+            sudo yum install -y postgresql
+          fi
+
+      - name: Wipe database (Option C – migrations from scratch)
+        if: vars.WIPE_DB == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [[ -z "$DATABASE_URL" ]]; then
+            echo "Error: DATABASE_URL secret is not set"
+            exit 1
+          fi
+          if [[ "$DATABASE_URL" != *"sslmode="* ]]; then
+            if [[ "$DATABASE_URL" == *"?"* ]]; then
+              export DATABASE_URL="${DATABASE_URL}&sslmode=require"
+            else
+              export DATABASE_URL="${DATABASE_URL}?sslmode=require"
+            fi
+          fi
+          chmod +x infra/scripts/wipe-db.sh
+          infra/scripts/wipe-db.sh
+
+      - name: Download backend artifact
         uses: actions/download-artifact@v4
         with:
-          name: backend-binary
+          name: backend-deploy-v${{ needs.get-version.outputs.version }}
+          merge-multiple: false
 
-      - name: Copy backend to VM (production)
+      - name: Determine deployment environment (deploy step)
+        id: deploy_env
+        run: |
+          BRANCH="${{ github.event.pull_request.base.ref }}"
+          APP_NAME="${{ secrets.VM_APP_NAME || '__TEMPLATE_DEPLOY_APP_NAME__' }}"
+          if [ "$BRANCH" = "prod" ]; then
+            echo "environment=production" >> $GITHUB_OUTPUT
+            echo "service_file=__TEMPLATE_BACKEND_PRODUCTION_SERVICE_FILE__" >> $GITHUB_OUTPUT
+            echo "service_name=__TEMPLATE_SYSTEMD_BACKEND_PRODUCTION__" >> $GITHUB_OUTPUT
+            echo "deploy_dir=/opt/${APP_NAME}/backend" >> $GITHUB_OUTPUT
+            echo "vault_dir=/var/lib/${APP_NAME}/vault" >> $GITHUB_OUTPUT
+            echo "port=__TEMPLATE_BACKEND_PRODUCTION_PORT__" >> $GITHUB_OUTPUT
+          else
+            echo "environment=staging" >> $GITHUB_OUTPUT
+            echo "service_file=__TEMPLATE_BACKEND_STAGING_SERVICE_FILE__" >> $GITHUB_OUTPUT
+            echo "service_name=__TEMPLATE_SYSTEMD_BACKEND_STAGING__" >> $GITHUB_OUTPUT
+            echo "deploy_dir=/opt/${APP_NAME}/backend" >> $GITHUB_OUTPUT
+            echo "vault_dir=/var/lib/${APP_NAME}/vault" >> $GITHUB_OUTPUT
+            echo "port=__TEMPLATE_BACKEND_STAGING_PORT__" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create backend .env for VM
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          VAULT_ENCRYPTION_KEY: ${{ secrets.VAULT_ENCRYPTION_KEY }}
+        run: |
+          if [[ -z "$DATABASE_URL" ]]; then
+            echo "Error: DATABASE_URL secret is not set or not available. Ensure it is configured in the production environment (Settings → Environments → production → Environment secrets) or in repository secrets." >&2
+            exit 1
+          fi
+          # Normalize postgres:// to postgresql:// (ensure-db.sh accepts both; normalize for consistency)
+          DATABASE_URL="${DATABASE_URL/#postgres:\/\//postgresql:\/\/}"
+          # Azure Flexible Server requires SSL; ensure sslmode=require is present
+          if [[ -n "$DATABASE_URL" && "$DATABASE_URL" != *"sslmode="* ]]; then
+            if [[ "$DATABASE_URL" == *"?"* ]]; then
+              DATABASE_URL="${DATABASE_URL}&sslmode=require"
+            else
+              DATABASE_URL="${DATABASE_URL}?sslmode=require"
+            fi
+          fi
+          printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > backend.env
+          printf 'HOST=127.0.0.1\nPORT=${{ steps.deploy_env.outputs.port }}\n' >> backend.env
+          printf 'VAULT_PATH=${{ steps.deploy_env.outputs.vault_dir }}\n' >> backend.env
+          if [[ -n "$VAULT_ENCRYPTION_KEY" ]]; then
+            printf 'VAULT_ENCRYPTION_KEY=%s\n' "$VAULT_ENCRYPTION_KEY" >> backend.env
+          fi
+
+      - name: Deploy backend to VM (systemd)
         uses: appleboy/scp-action@v1
         with:
-          host: ${{ secrets.VM_IP }}
-          username: ${{ secrets.VM_USER }}
+          host: ${{ secrets.SSH_IP }}
+          username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.VM_SSH_PORT || 22 }}
-          source: "backend"
-          target: "/tmp/backend-production-deploy/"
+          port: ${{ secrets.SSH_PORT || 22 }}
+          source: "backend-deploy.tar.gz,backend.env"
+          target: "/tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/"
 
-      - name: Deploy backend (production systemd)
+      - name: Install and restart backend systemd service
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.VM_IP }}
-          username: ${{ secrets.VM_USER }}
+          host: ${{ secrets.SSH_IP }}
+          username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.VM_SSH_PORT || 22 }}
+          port: ${{ secrets.SSH_PORT || 22 }}
           script: |
             set -e
-            APP_NAME="${{ secrets.VM_APP_NAME || '__TEMPLATE_DEPLOY_APP_NAME__' }}"
-            DEPLOY_DIR="/opt/${APP_NAME}/backend/production"
-            sudo mkdir -p "${DEPLOY_DIR}/bin"
-            sudo cp /tmp/backend-production-deploy/backend "${DEPLOY_DIR}/bin/backend"
-            sudo chmod +x "${DEPLOY_DIR}/bin/backend"
-            sudo systemctl restart __TEMPLATE_SYSTEMD_BACKEND_PRODUCTION__ || true
-            sudo systemctl status __TEMPLATE_SYSTEMD_BACKEND_PRODUCTION__ --no-pager || true
+            DEPLOY_DIR="${{ steps.deploy_env.outputs.deploy_dir }}"
+            VAULT_DIR="${{ steps.deploy_env.outputs.vault_dir }}"
+            SERVICE_NAME="${{ steps.deploy_env.outputs.service_name }}"
+            SERVICE_FILE="${{ steps.deploy_env.outputs.service_file }}"
+            ENV_NAME="${{ steps.deploy_env.outputs.environment }}"
+            
+            echo "=== Deploying to $ENV_NAME environment ==="
+            echo "Deploy directory: $DEPLOY_DIR"
+            echo "Vault directory: $VAULT_DIR"
+            echo "Service name: $SERVICE_NAME"
+            echo "Service file: $SERVICE_FILE"
+            
+            echo "=== Stopping backend (prevents restart loop during deploy) ==="
+            sudo systemctl stop "$SERVICE_NAME" || true
+            
+            sudo mkdir -p "$DEPLOY_DIR"
+            echo "=== Ensuring vault directory exists (create if missing, skip if exists) ==="
+            if [[ -d "$VAULT_DIR" ]]; then
+              echo "Vault directory already exists: $VAULT_DIR"
+            else
+              sudo mkdir -p "$VAULT_DIR"
+              sudo chown www-data:www-data "$VAULT_DIR"
+              echo "Created vault directory: $VAULT_DIR"
+            fi
+            cd /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy && tar -xzf backend-deploy.tar.gz
+            sudo install -m 755 /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/backend/backend "$DEPLOY_DIR/backend"
+            sudo rm -rf "$DEPLOY_DIR/migrations"
+            sudo cp -r /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/backend/migrations "$DEPLOY_DIR/"
+            sudo chown -R www-data:www-data "$DEPLOY_DIR/migrations"
+            sudo cp /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/backend.env "$DEPLOY_DIR/.env"
+            sudo chown www-data:www-data "$DEPLOY_DIR/.env"
+            sudo chmod 600 "$DEPLOY_DIR/.env"
+            sudo install -m 755 /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/backend/ensure-db.sh "$DEPLOY_DIR/ensure-db.sh"
+            [ -f /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/backend/sync-all-migration-checksums.sh ] && sudo install -m 755 /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/backend/sync-all-migration-checksums.sh "$DEPLOY_DIR/sync-all-migration-checksums.sh" || true
+            [ -f /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/backend/wipe-schema-on-vm.sh ] && sudo install -m 755 /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/backend/wipe-schema-on-vm.sh "$DEPLOY_DIR/wipe-schema-on-vm.sh" || true
+            [ -f /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/backend/emergency-wipe-and-fix.sh ] && sudo install -m 755 /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/backend/emergency-wipe-and-fix.sh "$DEPLOY_DIR/emergency-wipe-and-fix.sh" || true
+            echo "=== Wipe schema if WIPE_DB (migrations were consolidated - must start fresh) ==="
+            if [[ "${{ vars.WIPE_DB }}" == "true" ]]; then
+              sudo "$DEPLOY_DIR/wipe-schema-on-vm.sh" "$DEPLOY_DIR/.env" || { echo "Wipe failed - try manually: sudo $DEPLOY_DIR/wipe-schema-on-vm.sh"; exit 1; }
+            fi
+            echo "=== Ensuring database exists (migrations run on backend startup) ==="
+            sudo "$DEPLOY_DIR/ensure-db.sh" "$DEPLOY_DIR/.env"
+            if [[ "${{ vars.WIPE_DB }}" != "true" ]]; then
+              echo "=== Sync migration checksums (only helps when migration FILES match DB - not after consolidation) ==="
+              [ -f "$DEPLOY_DIR/sync-all-migration-checksums.sh" ] && sudo "$DEPLOY_DIR/sync-all-migration-checksums.sh" "$DEPLOY_DIR/.env" "$DEPLOY_DIR/migrations" || true
+            fi
+            sudo install -m 644 /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/backend/"$SERVICE_FILE" "/etc/systemd/system/$SERVICE_NAME.service"
+            sudo systemctl daemon-reload
+            sudo systemctl enable "$SERVICE_NAME.service"
+            sudo systemctl restart "$SERVICE_NAME.service"
+            sudo systemctl status "$SERVICE_NAME.service" --no-pager || true
 
-      - name: Job Summary
+      - name: Deployment Summary
         if: always()
         run: |
-          echo "## 🔍 Job Summary: Backend - Deploy Production" >> $GITHUB_STEP_SUMMARY
+          ENV_NAME="${{ steps.deploy_env.outputs.environment }}"
+          DEPLOY_DIR="${{ steps.deploy_env.outputs.deploy_dir }}"
+          VAULT_DIR="${{ steps.deploy_env.outputs.vault_dir }}"
+          PORT="${{ steps.deploy_env.outputs.port }}"
+          
+          echo "### 🔍 Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Environment:** production" >> $GITHUB_STEP_SUMMARY
-          echo "**Path:** /opt/\$APP_NAME/backend/production" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Backend (systemd)" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** $ENV_NAME" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.get-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Deploy Directory:** \`$DEPLOY_DIR\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Vault Directory:** \`$VAULT_DIR\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Port:** $PORT" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deploy Steps" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ vars.WIPE_DB }}" == "true" ]]; then
+            echo "- ✅ Wipe database (Option C – migrations from scratch)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "- ✅ Install backend binary to $DEPLOY_DIR" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Ensure vault directory exists (create if missing, skip if exists)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Ensure database exists (create if missing)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Migrations run on backend startup" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Install and restart \`${{ steps.deploy_env.outputs.service_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
 
   release:
-    needs: [build, docker]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/prod')
-    runs-on: ubuntu-latest
+    name: Create Release
+    runs-on: self-hosted
+    needs: [get-version, deploy]
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true
+    permissions:
+      contents: write
     steps:
-      - name: Release
-        run: |
-          echo "Release step placeholder for Backend"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
 
-      - name: Job Summary
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-deploy-v${{ needs.get-version.outputs.version }}
+          merge-multiple: false
+
+      - name: Create GitHub Release
+        run: |
+          echo "Release placeholder – attach artifacts or use softprops/action-gh-release if needed"
+
+      - name: Write job summary
         if: always()
         run: |
-          echo "## 🔍 Job Summary: Backend - Release" >> $GITHUB_STEP_SUMMARY
+          echo "## 🚀 Release Job Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Job:** Create Release" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Backend" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.get-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
 
   monitor-failures:
-    needs: [test, build, docker, deploy-staging, deploy-production, release]
+    name: Monitor Failed Jobs
+    runs-on: self-hosted
     if: failure()
-    runs-on: ubuntu-latest
+    needs: [format, lint, check, test, version, build, docker, get-version, deploy, release]
     permissions:
       contents: read
       issues: write
       actions: read
     steps:
-      - name: Report failure
+      - uses: actions/checkout@v4
+
+      - name: Create failure issue
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const runId = context.runId;
-            const workflow = context.workflow;
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId
+            });
+            const { data: jobsData } = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId
+            });
+            const failedJobs = jobsData.jobs.filter(job =>
+              job.conclusion === 'failure' || job.conclusion === 'cancelled' || job.conclusion === 'timed_out'
+            );
+            if (failedJobs.length === 0) return;
+
             const branch = context.ref.replace('refs/heads/', '');
             const title = `🚨 CI/CD Failure: Backend - ${branch} branch`;
+            let body = `## CI/CD Pipeline Failure\n\n`;
+            body += `**Workflow:** [Backend](${run.html_url})\n`;
+            body += `**Branch:** \`${branch}\`\n`;
+            body += `**Commit:** [${context.sha.substring(0, 7)}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/commit/${context.sha})\n`;
+            body += `**Triggered by:** @${context.actor}\n\n`;
+            body += `### Failed Jobs (${failedJobs.length})\n\n`;
+            for (const job of failedJobs) {
+              body += `#### ❌ ${job.name}\n`;
+              body += `- **Status:** ${job.conclusion}\n`;
+              body += `- **Job URL:** [View Job](${job.html_url})\n`;
+              const failedSteps = (job.steps || []).filter(s => s.conclusion === 'failure' || s.conclusion === 'cancelled' || s.conclusion === 'timed_out');
+              if (failedSteps.length) {
+                body += `- **Failed Steps:**\n`;
+                failedSteps.forEach(s => { body += `  - [\`${s.name}\`](${job.html_url}#step:${s.number}:1)\n`; });
+              }
+              body += `\n`;
+            }
+            body += `---\n*Workflow: \`.github/workflows/backend.yml\`*\n`;
 
-            const { data: jobs } = await github.rest.actions.listJobsForWorkflowRun({
-              owner,
-              repo,
-              run_id: runId
-            });
-
-            const failedJobs = jobs.jobs.filter(job => job.conclusion === 'failure');
-            const failureDetails = failedJobs.map(job => {
-              const failedSteps = (job.steps || []).filter(step => step.conclusion === 'failure');
-              const stepsText = failedSteps.length
-                ? failedSteps.map(step => `  - ${step.name}`).join('\n')
-                : '  - (no failed steps reported)';
-              return `- **${job.name}** (${job.conclusion})\n${stepsText}`;
-            }).join('\n');
-
-            const { data: milestones } = await github.rest.issues.listMilestones({
-              owner,
-              repo,
-              state: 'open'
-            });
-
-            let failureMilestone = milestones.find(m => m.title.toLowerCase().includes('ci/cd failures'));
-            if (!failureMilestone) {
+            let milestone = (await github.rest.issues.listMilestones({ owner: context.repo.owner, repo: context.repo.repo, state: 'open' })).data.find(m => m.title === 'CI/CD Failures');
+            if (!milestone) {
               const created = await github.rest.issues.createMilestone({
-                owner,
-                repo,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
                 title: 'CI/CD Failures',
-                description: 'Track all CI/CD pipeline failures across the repository'
+                description: 'Track all CI/CD pipeline failures across the repository',
+                state: 'open'
               });
-              failureMilestone = created.data;
+              milestone = created.data;
             }
 
             const { data: issues } = await github.rest.issues.listForRepo({
-              owner,
-              repo,
-              state: 'all',
-              labels: 'ci-failure'
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'ci-failure,backend'
             });
-
-            const existing = issues.find(issue => issue.title === title);
-            const body = [
-              `## 🚨 CI/CD Failure Report`,
-              ``,
-              `- **Workflow:** ${workflow}`,
-              `- **Branch:** ${branch}`,
-              `- **Run ID:** ${runId}`,
-              `- **Run URL:** ${context.payload.repository.html_url}/actions/runs/${runId}`,
-              ``,
-              `### Failed Jobs`,
-              failureDetails || '- No failed jobs found',
-              ``,
-              `### Troubleshooting`,
-              `- Review the failed job logs`,
-              `- Re-run the workflow after fixing issues`,
-              ``,
-              `**Completed at:** ${new Date().toISOString()}`
-            ].join('\n');
-
+            const existing = issues.find(i => i.title === title || i.title.includes(`Backend - ${branch}`));
             if (existing) {
               await github.rest.issues.update({
-                owner,
-                repo,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
                 issue_number: existing.number,
-                state: 'open',
                 body,
-                milestone: failureMilestone.number
+                state: 'open',
+                milestone: milestone.number
               });
             } else {
               await github.rest.issues.create({
-                owner,
-                repo,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
                 title,
                 body,
                 labels: ['ci-failure', 'backend', 'bug', 'priority-high'],
-                milestone: failureMilestone.number
+                milestone: milestone.number
               });
             }
+
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## 🔍 Failure Monitoring Job Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Job:** Monitor Failed Jobs" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Backend" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
