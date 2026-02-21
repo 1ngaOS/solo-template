@@ -29,14 +29,7 @@ CI/CD deploys to two environments:
    sudo mkdir -p /opt/__TEMPLATE_DEPLOY_APP_NAME__/frontend/{staging,production}
    ```
 
-2. Install the example systemd units:
-   ```bash
-   sudo cp backend-staging.service.example /etc/systemd/system/__TEMPLATE_SYSTEMD_BACKEND_STAGING__.service
-   sudo cp backend-production.service.example /etc/systemd/system/__TEMPLATE_SYSTEMD_BACKEND_PRODUCTION__.service
-   sudo cp frontend-staging.service.example /etc/systemd/system/__TEMPLATE_SYSTEMD_FRONTEND_STAGING__.service
-   sudo cp frontend-production.service.example /etc/systemd/system/__TEMPLATE_SYSTEMD_FRONTEND_PRODUCTION__.service
-   ```
-   Edit each unit so paths use your app name (e.g. `/opt/__TEMPLATE_DEPLOY_APP_NAME__/` → `/opt/myapp/`).
+2. **Service files**: Run `pnpm run apply-template` (from repo root) so that the script creates the actual systemd unit files from the `.example` templates (e.g. `__TEMPLATE_FRONTEND_STAGING_SERVICE_FILE__`, `__TEMPLATE_BACKEND_STAGING_SERVICE_FILE__`, etc.). Commit the created files under `infra/systemd/`; CI/CD copies them during deploy and installs them on the VM. If you prefer to install by hand, copy the generated files (not the `.example` ones) and ensure paths match your app name.
 
 3. Enable and start (after first deploy):
    ```bash

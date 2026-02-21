@@ -14,10 +14,11 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/__TEMPLATE_DEPLOY_APP_NAME__/frontend/staging
-ExecStart=/usr/bin/node index.js
+ExecStart=/usr/bin/node serve.mjs
 Restart=on-failure
 RestartSec=5
 EnvironmentFile=-/etc/default/__TEMPLATE_SYSTEMD_FRONTEND_STAGING__
+Environment=PORT=__TEMPLATE_FRONTEND_STAGING_PORT__
 
 [Install]
 WantedBy=multi-user.target

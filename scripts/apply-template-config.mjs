@@ -134,6 +134,42 @@ function applyToFile(filePath, replacements) {
   }
 }
 
+/** Create systemd service files from .example templates (with replacements applied). */
+function createSystemdServiceFiles(replacements) {
+  const systemdDir = path.join(rootDir, 'infra/systemd');
+  if (!fs.existsSync(systemdDir)) {
+    console.warn('Skip creating systemd files: infra/systemd not found');
+    return;
+  }
+
+  const mappings = [
+    { example: 'frontend-staging.service.example', outputKey: '__TEMPLATE_FRONTEND_STAGING_SERVICE_FILE__' },
+    { example: 'frontend-production.service.example', outputKey: '__TEMPLATE_FRONTEND_PRODUCTION_SERVICE_FILE__' },
+    { example: 'backend-staging.service.example', outputKey: '__TEMPLATE_BACKEND_STAGING_SERVICE_FILE__' },
+    { example: 'backend-production.service.example', outputKey: '__TEMPLATE_BACKEND_PRODUCTION_SERVICE_FILE__' },
+  ];
+
+  for (const { example, outputKey } of mappings) {
+    const examplePath = path.join(systemdDir, example);
+    const outputFileName = replacements[outputKey];
+    if (!outputFileName) continue;
+    if (!fs.existsSync(examplePath)) {
+      console.warn(`Skip (not found): ${example}`);
+      continue;
+    }
+    let content = fs.readFileSync(examplePath, 'utf8');
+    for (const [placeholder, value] of Object.entries(replacements)) {
+      if (placeholder === '__KEYWORDS_ARRAY_FOR_PACKAGE_JSON__') continue;
+      if (content.includes(placeholder)) {
+        content = content.split(placeholder).join(value);
+      }
+    }
+    const outputPath = path.join(systemdDir, outputFileName);
+    fs.writeFileSync(outputPath, content, 'utf8');
+    console.log(`Created: infra/systemd/${outputFileName}`);
+  }
+}
+
 function main() {
   const configPath = process.argv[2] || 'template.config.yaml';
   const config = loadConfig(configPath);
@@ -142,6 +178,7 @@ function main() {
   for (const file of FILES) {
     applyToFile(file, replacements);
   }
+  createSystemdServiceFiles(replacements);
   console.log('Done.');
 }
 

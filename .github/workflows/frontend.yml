@@ -698,11 +698,11 @@ jobs:
             sudo cp /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/frontend.env "$DEPLOY_DIR/.env"
             sudo chown www-data:www-data "$DEPLOY_DIR/.env"
             sudo chmod 600 "$DEPLOY_DIR/.env"
-            sudo install -m 644 /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/frontend/frontend.service "/etc/systemd/system/$SERVICE_NAME"
+            sudo install -m 644 /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/frontend/frontend.service "/etc/systemd/system/$SERVICE_NAME.service"
             sudo systemctl daemon-reload
-            sudo systemctl enable "$SERVICE_NAME"
-            sudo systemctl restart "$SERVICE_NAME"
-            sudo systemctl status "$SERVICE_NAME" --no-pager || true
+            sudo systemctl enable "$SERVICE_NAME.service"
+            sudo systemctl restart "$SERVICE_NAME.service"
+            sudo systemctl status "$SERVICE_NAME.service" --no-pager || true
 
       - name: Deployment Summary
         if: always()
