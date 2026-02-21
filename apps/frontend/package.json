@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "vite dev --open --port 5175 --host 0.0.0.0",
-    "build": "vite build",
+    "dev": "svelte-kit sync && vite dev --open --port 5175 --host 0.0.0.0",
+    "build": "svelte-kit sync && vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
@@ -17,7 +17,7 @@
   "devDependencies": {
     "@sveltejs/adapter-node": "^5.0.0",
     "@sveltejs/kit": "^2.5.0",
-    "@sveltejs/vite-plugin-svelte": "^3.0.1",
+    "@sveltejs/vite-plugin-svelte": "^4.0.0-next.6",
     "@tailwindcss/vite": "^4.0.0-alpha.32",
     "@types/eslint": "^9.6.0",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
