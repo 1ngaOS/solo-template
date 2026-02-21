@@ -170,6 +170,42 @@ function createSystemdServiceFiles(replacements) {
   }
 }
 
+/**
+ * Create env files from .example templates (with replacements applied).
+ * Writes to envs/<name>.env (no .example suffix) so you can fill in secrets and use with `cgs`.
+ */
+function createEnvFiles(replacements) {
+  const envsDir = path.join(rootDir, 'envs');
+  if (!fs.existsSync(envsDir)) {
+    console.warn('Skip creating env files: envs directory not found');
+    return;
+  }
+
+  const mappings = [
+    { example: 'env.env.example', output: 'env.env' },
+    { example: 'staging.env.example', output: 'staging.env' },
+    { example: 'prod.env.example', output: 'prod.env' },
+  ];
+
+  for (const { example, output } of mappings) {
+    const examplePath = path.join(envsDir, example);
+    if (!fs.existsSync(examplePath)) {
+      console.warn(`Skip (not found): envs/${example}`);
+      continue;
+    }
+    let content = fs.readFileSync(examplePath, 'utf8');
+    for (const [placeholder, value] of Object.entries(replacements)) {
+      if (placeholder === '__KEYWORDS_ARRAY_FOR_PACKAGE_JSON__') continue;
+      if (content.includes(placeholder)) {
+        content = content.split(placeholder).join(value);
+      }
+    }
+    const outputPath = path.join(envsDir, output);
+    fs.writeFileSync(outputPath, content, 'utf8');
+    console.log(`Created: envs/${output}`);
+  }
+}
+
 function main() {
   const configPath = process.argv[2] || 'template.config.yaml';
   const config = loadConfig(configPath);
@@ -179,7 +215,14 @@ function main() {
     applyToFile(file, replacements);
   }
   createSystemdServiceFiles(replacements);
+  createEnvFiles(replacements);
   console.log('Done.');
+  console.log('');
+  console.log('Next: fill in secrets in envs/env.env, envs/staging.env, envs/prod.env then run (from envs/):');
+  console.log('  cd envs');
+  console.log('  cgs env.env                                    # create repo secrets from env.env');
+  console.log('  cgs staging.env                                # create staging environment + secrets from staging.env');
+  console.log('  cgs prod.env env production                     # create production environment + secrets from prod.env');
 }
 
 main();

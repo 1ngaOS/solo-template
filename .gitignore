@@ -3,7 +3,9 @@ node_modules/
 target/
 _build/
 deps/
-
+envs/prod.env
+envs/staging.env
+envs/env.env
 # Build outputs
 dist/
 build/
