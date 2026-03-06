@@ -26,7 +26,7 @@ The config drives:
 - **SEO**: title, description, keywords, favicon, OG image
 - **Branding**: logo path and alt text
 - **Repo**: GitHub org/repo for links and edit URLs
-- **Deployment**: `appName` for `/opt/<name>/...`, systemd service names (staging/production)
+- **Deployment**: `appName` for `/opt/<name>/{frontend,backend}/{staging,production}`, systemd service names (staging/production)
 
 See `template.config.example.yaml` for every option. After applying, commit the changes and set up GitHub Environments and secrets as in `infra/systemd/README.md`.
 

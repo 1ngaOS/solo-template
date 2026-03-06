@@ -6,6 +6,7 @@ const config = {
 	preprocess: vitePreprocess(),
 
 	kit: {
+		// SSR only: do not use adapter-static or prerender. App runs as Node server (systemd).
 		adapter: adapter()
 	}
 };

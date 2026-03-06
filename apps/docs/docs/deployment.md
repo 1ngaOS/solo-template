@@ -2,73 +2,55 @@
 
 This guide covers deployment options for the Solo Monorepo Template.
 
-## Frontend Deployment
+## Frontend: SSR only (no static build)
 
-The frontend is built as a static site and can be deployed to:
+The frontend is **always** a Server-Side Rendered (SSR) app. It uses **`@sveltejs/adapter-node`** and runs as a Node server in production. Do **not** use `@sveltejs/adapter-static` or deploy the frontend as a static site.
 
-- **Cloudflare Pages**: Connect your repository and deploy automatically
-- **Vercel**: Connect your repository for automatic deployments
-- **Netlify**: Connect your repository for automatic deployments
-- **GitHub Pages**: Use GitHub Actions to deploy on push
+- **Build**: `pnpm frontend build` produces a Node app in `apps/frontend/build/`.
+- **Run**: On the VM, the frontend is started with `node serve.mjs` (from the deploy directory). `serve.mjs` loads `.env` and runs `build/index.js`.
 
-### Build Command
+### Frontend proxies to backend
 
-```bash
-pnpm frontend build
-```
+The frontend never calls the backend by its own URL from the client. All API access goes through the same origin:
 
-The build output will be in `apps/frontend/build`.
+- **Server-side**: `hooks.server.ts` rewrites `fetch('/api/...')` to the backend using `BACKEND_API_URL` / `PUBLIC_API_URL`.
+- **Client-side**: The browser requests `/api/...` on the frontend; `src/routes/api/[...path]/+server.ts` proxies to the backend.
 
-## Backend Deployment
+Set `BACKEND_API_URL` or `PUBLIC_API_URL` per environment (staging/production) so each frontend instance talks to the correct backend.
 
-The backend can be deployed as:
+## VM deployment (systemd, two envs per app)
 
-- **Docker Container**: Build and deploy using Docker
-- **Bare Metal**: Build the binary and run directly
-- **Cloud Providers**: Deploy to AWS, GCP, Azure, etc.
+CI/CD deploys to a VM with **two environments** per app: **staging** and **production**.
 
-### Docker Build
+| Branch | Environment | Paths on VM |
+|--------|-------------|------------|
+| `main` | staging | `/opt/<app>/backend/staging`, `/opt/<app>/frontend/staging` |
+| `prod` | production | `/opt/<app>/backend/production`, `/opt/<app>/frontend/production` |
 
-```bash
-cd apps/backend
-docker build -t backend .
-docker run -p 3000:3000 backend
-```
+Paths follow `/opt/<app>/{frontend,backend}/{staging,production}`.
 
-### Binary Build
+- **Systemd units**: `*-staging-*.service` and `*-production-*.service` (e.g. `app-backend-staging.service`, `app-frontend-production.service`).
+- **Backend**: Binary and migrations go to `/opt/<app>/backend/<env>`. Vault (if used) is under `/var/lib/<app>/backend/<env>/vault`.
+- **Frontend**: SSR build and `serve.mjs` go to `/opt/<app>/frontend/<env>`.
 
-```bash
-cd apps/backend
-cargo build --release
-./target/release/backend
-```
+See **infra/systemd/README.md** for GitHub Environments, secrets, and VM directory setup.
 
-## Documentation Deployment
+## Other deployment options
 
-The documentation site can be deployed similarly to the frontend:
+### Backend (Docker or binary)
 
-- **Cloudflare Pages**
-- **Vercel**
-- **Netlify**
-- **GitHub Pages**
+- **Docker**: `docker build` from `apps/backend`; run with appropriate env (e.g. `DATABASE_URL`, `PORT`).
+- **Bare metal**: `cargo build --release` and run the binary with env set.
 
-### Build Command
+### Documentation site
 
-```bash
-pnpm docs build
-```
+The docs app is a static Docusaurus site. Build with `pnpm docs build`; deploy to Cloudflare Pages, Vercel, Netlify, or GitHub Pages as needed.
 
-The build output will be in `apps/docs/build`.
+## Environment variables
 
-## Environment Variables
-
-Configure environment variables as needed for your deployment:
-
-- `PORT`: Server port (default: 3000)
-- `DATABASE_URL`: Database connection string (if using database)
-- `CORS_ORIGIN`: Allowed CORS origins
+- **Frontend (VM)**: `PORT`, `BACKEND_API_URL` or `PUBLIC_API_URL` (backend base URL for the same env).
+- **Backend**: `PORT`, `DATABASE_URL`, `VAULT_PATH`, `VAULT_ENCRYPTION_KEY` (if used).
 
 ## CI/CD
 
-GitHub Actions workflows are included for automated testing and deployment. See `.github/workflows/` for configuration.
-
+GitHub Actions workflows in `.github/workflows/` handle format, lint, test, version bump, build, and deploy. Frontend and backend workflows deploy to staging (merge to `main`) or production (merge to `prod`) on the VM via systemd.

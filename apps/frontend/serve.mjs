@@ -2,7 +2,7 @@
 /**
  * Production entry point for SvelteKit adapter-node build on VM (systemd).
  * Loads .env from the current directory, then starts the built server (build/index.js).
- * Usage: node serve.mjs (run from deploy dir: /opt/<app>/frontend/staging|production)
+ * Usage: node serve.mjs (run from deploy dir: /opt/<app>/frontend/staging or /opt/<app>/frontend/production)
  */
 
 import { createRequire } from 'node:module';

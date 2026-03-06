@@ -3,8 +3,8 @@
 # (e.g., solo-template-backend-staging.service) in infra/systemd/ before deploying.
 # The CI/CD workflow expects this file to exist.
 # Copy to /etc/systemd/system/__TEMPLATE_SYSTEMD_BACKEND_STAGING__.service on the VM.
-# Path: /opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/backend
-# Set APP_NAME via VM_APP_NAME secret or use __TEMPLATE_DEPLOY_APP_NAME__.
+# Path: /opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/staging/backend
+# Each app: /opt/<app>/{frontend,backend}/{staging,production}.
 
 [Unit]
 Description=__TEMPLATE_APP_NAME__ Backend API (staging)
@@ -13,10 +13,10 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/backend
+ExecStart=/opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/staging/backend
 Restart=on-failure
 RestartSec=5
-WorkingDirectory=/opt/__TEMPLATE_DEPLOY_APP_NAME__/backend
+WorkingDirectory=/opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/staging
 EnvironmentFile=-/etc/default/__TEMPLATE_SYSTEMD_BACKEND_STAGING__
 
 [Install]

@@ -3,8 +3,8 @@
 # (e.g., solo-template-frontend-staging.service) in infra/systemd/ before deploying.
 # The CI/CD workflow expects this file to exist.
 # Copy to /etc/systemd/system/__TEMPLATE_SYSTEMD_FRONTEND_STAGING__.service on the VM.
-# Serves from /opt/__TEMPLATE_DEPLOY_APP_NAME__/frontend/staging (e.g. SvelteKit adapter-node build).
-# Adjust ExecStart if using a static server (nginx/caddy) instead of Node.
+# Serves from /opt/__TEMPLATE_DEPLOY_APP_NAME__/frontend/staging (SvelteKit adapter-node SSR build).
+# Each app: /opt/<app>/{frontend,backend}/{staging,production}.
 
 [Unit]
 Description=__TEMPLATE_APP_NAME__ Frontend (staging)

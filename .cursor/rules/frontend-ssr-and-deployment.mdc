@@ -1,0 +1,36 @@
+---
+description: Frontend must be SSR; frontend proxies to backend; VM deploy layout and systemd
+globs: apps/frontend/**/*,.github/workflows/frontend.yml,infra/systemd/*
+alwaysApply: false
+---
+
+# Frontend SSR and VM deployment
+
+## Frontend is always SSR (never static)
+
+- **Use only `@sveltejs/adapter-node`** for the SvelteKit frontend. Do **not** use `@sveltejs/adapter-static`.
+- The frontend runs as a Node server in production (systemd). Build output is `build/` (adapter-node); we run it with `node serve.mjs` which loads `build/index.js`.
+- Do not add or switch to adapter-static, Vercel adapter, or any static-only adapter. This template deploys to a VM with systemd; the frontend must be an SSR app.
+
+## Frontend proxies to backend
+
+- The frontend **never** calls the backend from the client by URL. All API access goes through the same origin:
+  - **Server-side**: `handleFetch` in `hooks.server.ts` rewrites `fetch('/api/...')` to `BACKEND_API_URL`.
+  - **Client-side**: Browser calls `/api/...` on the frontend; `src/routes/api/[...path]/+server.ts` proxies to the backend.
+- Env on VM: set `BACKEND_API_URL` (or `PUBLIC_API_URL`) per environment so staging frontend talks to staging backend and production frontend to production backend.
+
+## VM deploy layout (two envs per app)
+
+- **Paths on VM** (layout: `/opt/<app>/{frontend,backend}/{staging,production}`):
+  - Staging: `/opt/<app>/backend/staging`, `/opt/<app>/frontend/staging`
+  - Production: `/opt/<app>/backend/production`, `/opt/<app>/frontend/production`
+- **Systemd units**:
+  - Staging: `*-staging-*.service` (e.g. `app-backend-staging.service`, `app-frontend-staging.service`)
+  - Production: `*-production-*.service`
+- Each app has exactly two environments (staging and production). Service files live under `infra/systemd/` and are applied via `pnpm run apply-template`.
+
+## When editing frontend or workflows
+
+- Do not introduce adapter-static or static-only build.
+- Keep proxy behavior: `/api/*` must be forwarded to `BACKEND_API_URL` / `PUBLIC_API_URL`.
+- Keep deploy dirs as `/opt/<app>/{frontend,backend}/{staging,production}`.

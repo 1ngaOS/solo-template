@@ -1,3 +1,4 @@
+# Env modes: main/uat → staging, prod → production. See .github/ENV_MODES.md.
 name: Backend CI/CD
 
 on:
@@ -670,6 +671,7 @@ jobs:
         working-directory: apps/backend
         run: cargo build --release
 
+      # Env mode: prod → production, main/uat → staging (see .github/ENV_MODES.md)
       - name: Determine deployment environment
         id: env
         run: |
@@ -680,15 +682,18 @@ jobs:
             echo "service_file=__TEMPLATE_BACKEND_PRODUCTION_SERVICE_FILE__" >> $GITHUB_OUTPUT
             echo "service_name=__TEMPLATE_SYSTEMD_BACKEND_PRODUCTION__" >> $GITHUB_OUTPUT
             echo "port=__TEMPLATE_BACKEND_PRODUCTION_PORT__" >> $GITHUB_OUTPUT
+            echo "deploy_dir=/opt/${APP_NAME}/backend/production" >> $GITHUB_OUTPUT
           else
             echo "environment=staging" >> $GITHUB_OUTPUT
             echo "service_file=__TEMPLATE_BACKEND_STAGING_SERVICE_FILE__" >> $GITHUB_OUTPUT
             echo "service_name=__TEMPLATE_SYSTEMD_BACKEND_STAGING__" >> $GITHUB_OUTPUT
             echo "port=__TEMPLATE_BACKEND_STAGING_PORT__" >> $GITHUB_OUTPUT
+            echo "deploy_dir=/opt/${APP_NAME}/backend/staging" >> $GITHUB_OUTPUT
           fi
           echo "Deploying to: ${{ steps.env.outputs.environment }}"
           echo "Service file: ${{ steps.env.outputs.service_file }}"
           echo "Service name: ${{ steps.env.outputs.service_name }}"
+          echo "Deploy directory: ${{ steps.env.outputs.deploy_dir }}"
           echo "Port: ${{ steps.env.outputs.port }}"
 
       - name: Package backend for VM deploy
@@ -742,6 +747,7 @@ jobs:
           echo "### Build Information" >> $GITHUB_STEP_SUMMARY
           echo "- **Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Env mode:** ${{ steps.env.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Binary:** \`backend\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
@@ -929,6 +935,7 @@ jobs:
           name: backend-deploy-v${{ needs.get-version.outputs.version }}
           merge-multiple: false
 
+      # Env mode: prod → production, main/uat → staging (see .github/ENV_MODES.md)
       - name: Determine deployment environment (deploy step)
         id: deploy_env
         run: |
@@ -938,15 +945,15 @@ jobs:
             echo "environment=production" >> $GITHUB_OUTPUT
             echo "service_file=__TEMPLATE_BACKEND_PRODUCTION_SERVICE_FILE__" >> $GITHUB_OUTPUT
             echo "service_name=__TEMPLATE_SYSTEMD_BACKEND_PRODUCTION__" >> $GITHUB_OUTPUT
-            echo "deploy_dir=/opt/${APP_NAME}/backend" >> $GITHUB_OUTPUT
-            echo "vault_dir=/var/lib/${APP_NAME}/vault" >> $GITHUB_OUTPUT
+            echo "deploy_dir=/opt/${APP_NAME}/backend/production" >> $GITHUB_OUTPUT
+            echo "vault_dir=/var/lib/${APP_NAME}/backend/production/vault" >> $GITHUB_OUTPUT
             echo "port=__TEMPLATE_BACKEND_PRODUCTION_PORT__" >> $GITHUB_OUTPUT
           else
             echo "environment=staging" >> $GITHUB_OUTPUT
             echo "service_file=__TEMPLATE_BACKEND_STAGING_SERVICE_FILE__" >> $GITHUB_OUTPUT
             echo "service_name=__TEMPLATE_SYSTEMD_BACKEND_STAGING__" >> $GITHUB_OUTPUT
-            echo "deploy_dir=/opt/${APP_NAME}/backend" >> $GITHUB_OUTPUT
-            echo "vault_dir=/var/lib/${APP_NAME}/vault" >> $GITHUB_OUTPUT
+            echo "deploy_dir=/opt/${APP_NAME}/backend/staging" >> $GITHUB_OUTPUT
+            echo "vault_dir=/var/lib/${APP_NAME}/backend/staging/vault" >> $GITHUB_OUTPUT
             echo "port=__TEMPLATE_BACKEND_STAGING_PORT__" >> $GITHUB_OUTPUT
           fi
 
@@ -1021,6 +1028,7 @@ jobs:
             fi
             cd /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy && tar -xzf backend-deploy.tar.gz
             sudo install -m 755 /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/backend/backend "$DEPLOY_DIR/backend"
+            sudo chown www-data:www-data "$DEPLOY_DIR/backend"
             sudo rm -rf "$DEPLOY_DIR/migrations"
             sudo cp -r /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/backend/migrations "$DEPLOY_DIR/"
             sudo chown -R www-data:www-data "$DEPLOY_DIR/migrations"
@@ -1059,7 +1067,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "**Component:** Backend (systemd)" >> $GITHUB_STEP_SUMMARY
-          echo "**Environment:** $ENV_NAME" >> $GITHUB_STEP_SUMMARY
+          echo "**Env mode:** $ENV_NAME" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** ${{ needs.get-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Deploy Directory:** \`$DEPLOY_DIR\`" >> $GITHUB_STEP_SUMMARY
           echo "**Vault Directory:** \`$VAULT_DIR\`" >> $GITHUB_STEP_SUMMARY

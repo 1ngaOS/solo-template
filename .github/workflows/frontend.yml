@@ -1,3 +1,4 @@
+# Env modes: main/uat → staging, prod → production. See .github/ENV_MODES.md.
 name: Frontend CI/CD
 
 on:
@@ -477,11 +478,12 @@ jobs:
           echo "Build directory exists:"
           ls -la build/ | head -20
 
+      # Env mode: prod → production, main/uat → staging (see .github/ENV_MODES.md)
       - name: Determine deployment environment
         id: env
         run: |
           BRANCH="${{ github.event.pull_request.base.ref }}"
-          APP_NAME="__TEMPLATE_DEPLOY_APP_NAME__"
+          APP_NAME="${{ secrets.VM_APP_NAME || '__TEMPLATE_DEPLOY_APP_NAME__' }}"
           if [ "$BRANCH" = "prod" ]; then
             echo "environment=production" >> $GITHUB_OUTPUT
             echo "service_file=__TEMPLATE_FRONTEND_PRODUCTION_SERVICE_FILE__" >> $GITHUB_OUTPUT
@@ -529,6 +531,7 @@ jobs:
           echo "### Build Information" >> $GITHUB_STEP_SUMMARY
           echo "- **Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch:** ${{ github.event.pull_request.base.ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Env mode:** ${{ steps.env.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Completed Steps" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Checkout repository" >> $GITHUB_STEP_SUMMARY
@@ -593,7 +596,7 @@ jobs:
       github.event_name == 'pull_request' &&
       github.event.action == 'closed' &&
       github.event.pull_request.merged == true &&
-      (github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'prod')
+      (github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'uat' || github.event.pull_request.base.ref == 'prod')
     permissions:
       contents: read
     steps:
@@ -631,6 +634,7 @@ jobs:
           ls -lh frontend-deploy.tar.gz
           tar -tzf frontend-deploy.tar.gz | head -15
 
+      # Env mode: prod → production, main/uat → staging (see .github/ENV_MODES.md)
       - name: Determine deployment environment (deploy step)
         id: deploy_env
         run: |
@@ -652,11 +656,13 @@ jobs:
 
       - name: Create frontend .env for VM
         run: |
+          # Frontend (SSR) proxies /api to backend in the same env; BACKEND_API_URL is used server-side.
           API_URL="${{ secrets.PUBLIC_API_URL }}"
           if [ -z "$API_URL" ]; then
             API_URL="http://127.0.0.1:${{ steps.deploy_env.outputs.api_port }}"
           fi
           printf 'PUBLIC_API_URL=%s\n' "$API_URL" > frontend.env
+          printf 'BACKEND_API_URL=%s\n' "$API_URL" >> frontend.env
 
       - name: Copy frontend to VM
         uses: appleboy/scp-action@v1
@@ -692,7 +698,7 @@ jobs:
             cd /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy && tar -xzf frontend-deploy.tar.gz
             sudo rm -rf "$DEPLOY_DIR/build"
             sudo cp -r /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/frontend/build "$DEPLOY_DIR/"
-            sudo install -m 644 /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/frontend/package.json "$DEPLOY_DIR/"
+            sudo install -m 644 /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/frontend/package.json "$DEPLOY_DIR/" 2>/dev/null || true
             sudo install -m 755 /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/frontend/serve.mjs "$DEPLOY_DIR/"
             sudo chown -R www-data:www-data "$DEPLOY_DIR"
             sudo cp /tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/frontend.env "$DEPLOY_DIR/.env"
@@ -715,7 +721,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "**Component:** Frontend (systemd)" >> $GITHUB_STEP_SUMMARY
-          echo "**Environment:** $ENV_NAME" >> $GITHUB_STEP_SUMMARY
+          echo "**Env mode:** $ENV_NAME" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** ${{ needs.get-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Deploy Directory:** \`$DEPLOY_DIR\`" >> $GITHUB_STEP_SUMMARY
           echo "**Port:** $PORT" >> $GITHUB_STEP_SUMMARY
