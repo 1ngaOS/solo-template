@@ -2,10 +2,59 @@
 
 Each app is deployed in **two environments** on the VM: **staging** and **production**. Paths and service names are env-specific. CI/CD uses the same **env mode** mapping for all workflows; see [.github/ENV_MODES.md](../../.github/ENV_MODES.md).
 
+## Naming Convention
+
+Service files follow the naming pattern: **`{appname}-{env}-{frontend|backend}.service`**
+
+Examples:
+- `myapp-staging-frontend.service`
+- `myapp-staging-backend.service`
+- `myapp-production-frontend.service`
+- `myapp-production-backend.service`
+
+This convention ensures consistent identification of services across multiple apps on the same VM.
+
+## Port Allocation
+
+Each service has a **dedicated port** configured via environment variables:
+
+| Component | Environment | Default Port Range | Example Port |
+|-----------|-------------|-------------------|--------------|
+| Backend   | Staging     | 6100-6199         | 6100         |
+| Frontend  | Staging     | 6200-6299         | 6200         |
+| Backend   | Production  | 6300-6399         | 6300         |
+| Frontend  | Production  | 6400-6499         | 6400         |
+
+Ports are configured in `template.config.yaml` under `deployment:` section and applied via `pnpm run apply-template`.
+
+### Finding Available Ports
+
+Use the provided script to scan running services and find available ports:
+
+```bash
+# Scan all services and get recommendations
+./scripts/find-available-port.sh
+
+# Filter by app name
+./scripts/find-available-port.sh myapp
+
+# Filter by environment
+./scripts/find-available-port.sh myapp staging
+
+# Filter by component
+./scripts/find-available-port.sh myapp production backend
+```
+
+The script will:
+1. Scan `/etc/systemd/system` and `/lib/systemd/system` for matching service files
+2. Extract configured ports from service files
+3. Check which ports are actively listening
+4. Recommend available ports in the appropriate ranges
+
 | Branch   | Environment | Deploy paths (on VM) | Systemd units |
 |----------|-------------|----------------------|----------------|
-| `main`   | **staging** | `/opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/staging`, `/opt/__TEMPLATE_DEPLOY_APP_NAME__/frontend/staging` | `__TEMPLATE_SYSTEMD_BACKEND_STAGING__`, `__TEMPLATE_SYSTEMD_FRONTEND_STAGING__` |
-| `prod`   | **production** | `/opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/production`, `/opt/__TEMPLATE_DEPLOY_APP_NAME__/frontend/production` | `__TEMPLATE_SYSTEMD_BACKEND_PRODUCTION__`, `__TEMPLATE_SYSTEMD_FRONTEND_PRODUCTION__` |
+| `main`   | **staging** | `/opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/staging`, `/opt/__TEMPLATE_DEPLOY_APP_NAME__/frontend/staging` | `{appname}-staging-backend.service`, `{appname}-staging-frontend.service` |
+| `prod`   | **production** | `/opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/production`, `/opt/__TEMPLATE_DEPLOY_APP_NAME__/frontend/production` | `{appname}-production-backend.service`, `{appname}-production-frontend.service` |
 
 Paths follow `/opt/<app>/{frontend,backend}/{staging,production}`.
 

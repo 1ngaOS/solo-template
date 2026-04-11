@@ -39,21 +39,25 @@ deployment:
   # Value for /opt/<appName>/... and VM_APP_NAME secret. Use a short slug (e.g. app, myapp).
   appName: app
   # Systemd unit names (used in CI/CD and example unit files).
-  backendStagingService: backend-staging
-  backendProductionService: backend-production
-  frontendStagingService: frontend-staging
-  frontendProductionService: frontend-production
+  # Note: Service files follow naming convention: {appName}-{env}-{frontend|backend}.service
+  backendStagingService: app-staging-backend
+  backendProductionService: app-production-backend
+  frontendStagingService: app-staging-frontend
+  frontendProductionService: app-production-frontend
   # Systemd service file paths (relative to infra/systemd/).
   # These files are copied during deploy and referenced in workflow triggers.
   # Defaults to {appNameSlug}-{component}-{env}.service if not specified.
-  frontendStagingServiceFile: solo-template-frontend-staging.service
-  frontendProductionServiceFile: solo-template-frontend-production.service
-  backendStagingServiceFile: solo-template-backend-staging.service
-  backendProductionServiceFile: solo-template-backend-production.service
+  # Recommended naming: {appName}-{env}-{component}.service
+  frontendStagingServiceFile: app-staging-frontend.service
+  frontendProductionServiceFile: app-production-frontend.service
+  backendStagingServiceFile: app-staging-backend.service
+  backendProductionServiceFile: app-production-backend.service
   # Frontend ports (for staging and production environments).
+  # Use ./scripts/find-available-port.sh to find available ports on your VM.
   frontendStagingPort: 6200
   frontendProductionPort: 6400
   # Backend API ports (for frontend to connect to).
+  # Use ./scripts/find-available-port.sh to find available ports on your VM.
   backendStagingPort: 6100
   backendProductionPort: 6300
   # Database names (for PostgreSQL).
