@@ -1,24 +1,28 @@
 # Example systemd unit for frontend (staging).
 # IMPORTANT: Create a service file named: __TEMPLATE_FRONTEND_STAGING_SERVICE_FILE__
-# (e.g., solo-template-frontend-staging.service) in infra/systemd/ before deploying.
+# Naming convention: {appname}-{env}-{backend/frontend}.service (e.g., myapp-staging-frontend.service)
 # The CI/CD workflow expects this file to exist.
 # Copy to /etc/systemd/system/__TEMPLATE_SYSTEMD_FRONTEND_STAGING__.service on the VM.
 # Serves from /opt/__TEMPLATE_DEPLOY_APP_NAME__/frontend/staging (SvelteKit adapter-node SSR build).
 # Each app: /opt/<app>/{frontend,backend}/{staging,production}.
+# Port: __TEMPLATE_FRONTEND_STAGING_PORT__ (dedicated port for this app/env combination)
 
 [Unit]
-Description=__TEMPLATE_APP_NAME__ Frontend (staging)
+Description=__TEMPLATE_APP_NAME__ Frontend (staging) - Port __TEMPLATE_FRONTEND_STAGING_PORT__
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 WorkingDirectory=/opt/__TEMPLATE_DEPLOY_APP_NAME__/frontend/staging
-ExecStart=/usr/bin/node serve.mjs
+ExecStart=/usr/bin/node serve.mjs --port __TEMPLATE_FRONTEND_STAGING_PORT__
 Restart=on-failure
 RestartSec=5
 EnvironmentFile=-/etc/default/__TEMPLATE_SYSTEMD_FRONTEND_STAGING__
 Environment=PORT=__TEMPLATE_FRONTEND_STAGING_PORT__
+Environment=APP_ENV=staging
+Environment=APP_NAME=__TEMPLATE_DEPLOY_APP_NAME__
+Environment=BACKEND_URL=http://localhost:__TEMPLATE_BACKEND_STAGING_PORT__
 
 [Install]
 WantedBy=multi-user.target

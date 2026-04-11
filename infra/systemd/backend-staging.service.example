@@ -1,23 +1,27 @@
 # Example systemd unit for backend (staging).
 # IMPORTANT: Create a service file named: __TEMPLATE_BACKEND_STAGING_SERVICE_FILE__
-# (e.g., solo-template-backend-staging.service) in infra/systemd/ before deploying.
+# Naming convention: {appname}-{env}-{backend/frontend}.service (e.g., myapp-staging-backend.service)
 # The CI/CD workflow expects this file to exist.
 # Copy to /etc/systemd/system/__TEMPLATE_SYSTEMD_BACKEND_STAGING__.service on the VM.
 # Path: /opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/staging/backend
 # Each app: /opt/<app>/{frontend,backend}/{staging,production}.
+# Port: __TEMPLATE_BACKEND_STAGING_PORT__ (dedicated port for this app/env combination)
 
 [Unit]
-Description=__TEMPLATE_APP_NAME__ Backend API (staging)
+Description=__TEMPLATE_APP_NAME__ Backend API (staging) - Port __TEMPLATE_BACKEND_STAGING_PORT__
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/staging/backend
+ExecStart=/opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/staging/backend --port __TEMPLATE_BACKEND_STAGING_PORT__
 Restart=on-failure
 RestartSec=5
 WorkingDirectory=/opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/staging
 EnvironmentFile=-/etc/default/__TEMPLATE_SYSTEMD_BACKEND_STAGING__
+Environment=PORT=__TEMPLATE_BACKEND_STAGING_PORT__
+Environment=APP_ENV=staging
+Environment=APP_NAME=__TEMPLATE_DEPLOY_APP_NAME__
 
 [Install]
 WantedBy=multi-user.target

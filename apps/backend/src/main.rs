@@ -5,6 +5,7 @@ use axum::{
     Router,
 };
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::net::SocketAddr;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
@@ -41,6 +42,14 @@ async fn main() {
         .with_env_filter("backend=debug,tower_http=debug")
         .init();
 
+    // Get port from command line args or environment variable (default: 3000)
+    let port: u16 = std::env::args()
+        .nth(1)
+        .and_then(|arg| arg.strip_prefix("--port=").map(|s| s.to_string()))
+        .or_else(|| env::var("PORT").ok())
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(3000);
+
     // Build application with routes
     let app = Router::new()
         .route("/", get(root))
@@ -51,7 +60,7 @@ async fn main() {
         .layer(TraceLayer::new_for_http());
 
     // Run server
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!("🚀 Server starting on http://{}", addr);
 
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();

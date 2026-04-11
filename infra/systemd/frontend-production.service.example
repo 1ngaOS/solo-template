@@ -1,23 +1,27 @@
 # Example systemd unit for frontend (production).
 # IMPORTANT: Create a service file named: __TEMPLATE_FRONTEND_PRODUCTION_SERVICE_FILE__
-# (e.g., solo-template-frontend-production.service) in infra/systemd/ before deploying.
+# Naming convention: {appname}-{env}-{backend/frontend}.service (e.g., myapp-production-frontend.service)
 # Copy to /etc/systemd/system/__TEMPLATE_SYSTEMD_FRONTEND_PRODUCTION__.service on the VM.
 # Serves from /opt/__TEMPLATE_DEPLOY_APP_NAME__/frontend/production (SvelteKit adapter-node SSR build).
 # Each app: /opt/<app>/{frontend,backend}/{staging,production}.
+# Port: __TEMPLATE_FRONTEND_PRODUCTION_PORT__ (dedicated port for this app/env combination)
 
 [Unit]
-Description=__TEMPLATE_APP_NAME__ Frontend (production)
+Description=__TEMPLATE_APP_NAME__ Frontend (production) - Port __TEMPLATE_FRONTEND_PRODUCTION_PORT__
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 WorkingDirectory=/opt/__TEMPLATE_DEPLOY_APP_NAME__/frontend/production
-ExecStart=/usr/bin/node serve.mjs
+ExecStart=/usr/bin/node serve.mjs --port __TEMPLATE_FRONTEND_PRODUCTION_PORT__
 Restart=on-failure
 RestartSec=5
 EnvironmentFile=-/etc/default/__TEMPLATE_SYSTEMD_FRONTEND_PRODUCTION__
 Environment=PORT=__TEMPLATE_FRONTEND_PRODUCTION_PORT__
+Environment=APP_ENV=production
+Environment=APP_NAME=__TEMPLATE_DEPLOY_APP_NAME__
+Environment=BACKEND_URL=http://localhost:__TEMPLATE_BACKEND_PRODUCTION_PORT__
 
 [Install]
 WantedBy=multi-user.target

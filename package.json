@@ -7,7 +7,8 @@
     "frontend": "pnpm --filter frontend",
     "backend": "pnpm --filter backend",
     "docs": "pnpm --filter docs",
-    "apply-template": "node scripts/apply-template-config.mjs"
+    "apply-template": "node scripts/apply-template-config.mjs",
+    "find-available-port": "bash scripts/find-available-port.sh"
   },
   "devDependencies": {
     "yaml": "^2.8.2"

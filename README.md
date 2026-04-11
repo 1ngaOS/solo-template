@@ -26,9 +26,32 @@ The config drives:
 - **SEO**: title, description, keywords, favicon, OG image
 - **Branding**: logo path and alt text
 - **Repo**: GitHub org/repo for links and edit URLs
-- **Deployment**: `appName` for `/opt/<name>/{frontend,backend}/{staging,production}`, systemd service names (staging/production)
+- **Deployment**: `appName` for `/opt/<name>/{frontend,backend}/{staging,production}`, systemd service names (staging/production), dedicated port mappings
 
 See `template.config.example.yaml` for every option. After applying, commit the changes and set up GitHub Environments and secrets as in `infra/systemd/README.md`.
+
+## 🔍 Finding Available Ports
+
+Before deploying a new app, use the port finder script to scan running services and get port recommendations:
+
+```bash
+# Scan all services and get recommendations
+pnpm run find-available-port
+
+# Or run directly
+./scripts/find-available-port.sh
+
+# Filter by app name
+./scripts/find-available-port.sh myapp
+
+# Filter by environment
+./scripts/find-available-port.sh myapp staging
+
+# Filter by component
+./scripts/find-available-port.sh myapp production backend
+```
+
+The script scans `/etc/systemd/system` and `/lib/systemd/system` for services matching the `{appname}-{env}-{frontend|backend}.service` pattern, extracts configured ports, checks which are actively listening, and recommends available ports in the appropriate ranges.
 
 ## 🚀 Features
 
