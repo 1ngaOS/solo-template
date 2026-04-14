@@ -14,7 +14,7 @@ on:
       public_api_url:
         description: 'Public API URL'
         required: false
-        default: ''
+        default: '' # TODO: Add default value
 
 env:
   CARGO_TERM_COLOR: always
@@ -114,8 +114,8 @@ jobs:
         # Normalize before lint so any Prettier check would pass; we run eslint only below
 
       - name: Run linter
-        run: cd apps/frontend && npx eslint .
-        # Use npx (from Node.js) instead of pnpm exec to avoid "pnpm: command not found" on self-hosted
+        run: pnpm --filter frontend lint
+        # Use pnpm filter to run frontend lint script
 
       - name: Write job summary
         if: always()
