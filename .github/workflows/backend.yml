@@ -986,20 +986,20 @@ jobs:
       - name: Deploy backend to VM (systemd)
         uses: appleboy/scp-action@v1
         with:
-          host: ${{ secrets.SSH_IP }}
-          username: ${{ secrets.SSH_USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
+          host: ${{ secrets.VM_IP }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.VM_SSH_PORT || 22 }}
           source: "backend-deploy.tar.gz,backend.env"
           target: "/tmp/__TEMPLATE_DEPLOY_APP_NAME__-deploy/"
 
       - name: Install and restart backend systemd service
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.SSH_IP }}
-          username: ${{ secrets.SSH_USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
+          host: ${{ secrets.VM_IP }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.VM_SSH_PORT || 22 }}
           script: |
             set -e
             DEPLOY_DIR="${{ steps.deploy_env.outputs.deploy_dir }}"

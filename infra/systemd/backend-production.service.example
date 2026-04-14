@@ -1,7 +1,9 @@
 # Example systemd unit for backend (production).
 # IMPORTANT: Create a service file named: __TEMPLATE_BACKEND_PRODUCTION_SERVICE_FILE__
 # Naming convention: {appname}-{env}-{backend/frontend}.service (e.g., myapp-production-backend.service)
+# The CI/CD workflow expects this file to exist.
 # Copy to /etc/systemd/system/__TEMPLATE_SYSTEMD_BACKEND_PRODUCTION__.service on the VM.
+# IMPORTANT: Service name MUST start with {appName}- prefix for identification (e.g., myapp-production-backend).
 # Path: /opt/__TEMPLATE_DEPLOY_APP_NAME__/backend/production/backend
 # Each app: /opt/<app>/{frontend,backend}/{staging,production}.
 # Port: __TEMPLATE_BACKEND_PRODUCTION_PORT__ (dedicated port for this app/env combination)

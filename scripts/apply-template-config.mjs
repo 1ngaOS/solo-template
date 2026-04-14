@@ -68,10 +68,10 @@ function buildReplacements(config) {
     __TEMPLATE_REPO_ORG__: repo.organization || 'your-org',
     __TEMPLATE_REPO_NAME__: repo.name || nameSlug,
     __TEMPLATE_DEPLOY_APP_NAME__: deployment.appName || 'app',
-    __TEMPLATE_SYSTEMD_BACKEND_STAGING__: deployment.backendStagingService || 'backend-staging',
-    __TEMPLATE_SYSTEMD_BACKEND_PRODUCTION__: deployment.backendProductionService || 'backend-production',
-    __TEMPLATE_SYSTEMD_FRONTEND_STAGING__: deployment.frontendStagingService || 'frontend-staging',
-    __TEMPLATE_SYSTEMD_FRONTEND_PRODUCTION__: deployment.frontendProductionService || 'frontend-production',
+    __TEMPLATE_SYSTEMD_BACKEND_STAGING__: deployment.backendStagingService || `${nameSlug}-backend-staging`,
+    __TEMPLATE_SYSTEMD_BACKEND_PRODUCTION__: deployment.backendProductionService || `${nameSlug}-backend-production`,
+    __TEMPLATE_SYSTEMD_FRONTEND_STAGING__: deployment.frontendStagingService || `${nameSlug}-frontend-staging`,
+    __TEMPLATE_SYSTEMD_FRONTEND_PRODUCTION__: deployment.frontendProductionService || `${nameSlug}-frontend-production`,
     __TEMPLATE_FRONTEND_STAGING_SERVICE_FILE__: deployment.frontendStagingServiceFile || `${nameSlug}-frontend-staging.service`,
     __TEMPLATE_FRONTEND_PRODUCTION_SERVICE_FILE__: deployment.frontendProductionServiceFile || `${nameSlug}-frontend-production.service`,
     __TEMPLATE_BACKEND_STAGING_SERVICE_FILE__: deployment.backendStagingServiceFile || `${nameSlug}-backend-staging.service`,
@@ -126,6 +126,18 @@ function applyToFile(filePath, replacements) {
       /"keywords":\s*\[[^\]]*\]/,
       `"keywords": ${replacements.__KEYWORDS_ARRAY_FOR_PACKAGE_JSON__}`
     );
+    if (content !== before) changed = true;
+  }
+  // README.md: clean up template-specific sections and references
+  if (filePath === 'README.md') {
+    const before = content;
+    // Remove the "Using this template" section entirely (for template users only)
+    content = content.replace(
+      /^## 📋 Using this template[\s\S]*?\n## 🔍/m,
+      '## 🔍'
+    );
+    // Clean up extra blank lines left behind
+    content = content.replace(/\n{3,}/g, '\n\n');
     if (content !== before) changed = true;
   }
   if (changed) {
