@@ -1,0 +1,14 @@
+{
+  "name": "__TEMPLATE_APP_NAME_SLUG__",
+  "displayName": "__TEMPLATE_APP_NAME__",
+  "expo": {
+    "name": "__TEMPLATE_APP_NAME__",
+    "slug": "__TEMPLATE_APP_NAME_SLUG__",
+    "android": {
+      "package": "com.wanga.__TEMPLATE_APP_NAME_SLUG__"
+    },
+    "ios": {
+      "bundleIdentifier": "com.wanga.__TEMPLATE_APP_NAME_SLUG__"
+    }
+  }
+}
