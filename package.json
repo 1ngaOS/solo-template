@@ -7,7 +7,9 @@
     "frontend": "pnpm --filter frontend",
     "backend": "pnpm --filter backend",
     "docs": "pnpm --filter docs",
+    "mobile": "pnpm --filter mobile",
     "apply-template": "node scripts/apply-template-config.mjs",
+    "generate-app-icons": "node scripts/generate-app-icons.mjs",
     "find-available-port": "bash scripts/find-available-port.sh"
   },
   "devDependencies": {
