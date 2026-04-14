@@ -110,6 +110,7 @@ const FILES = [
   'infra/systemd/frontend-production.service.example',
   '.github/workflows/backend.yml',
   '.github/workflows/frontend.yml',
+  '.github/workflows/mobile.yml',
 ];
 
 function applyToFile(filePath, replacements) {

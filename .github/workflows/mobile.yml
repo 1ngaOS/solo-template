@@ -1,0 +1,619 @@
+name: Mobile CI/CD
+
+on:
+  pull_request:
+    types: [opened, synchronize, closed]
+    paths:
+      - 'apps/mobile/**'
+      - '.github/workflows/mobile.yml'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  format:
+    name: Format
+    runs-on: self-hosted
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == false &&
+       (github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'uat' || github.event.pull_request.base.ref == 'prod'))
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pnpm via Corepack
+        run: corepack enable && corepack prepare pnpm@10 --activate
+
+      - name: Ensure pnpm store path exists
+        run: mkdir -p $(pnpm store path)
+
+      - name: Add pnpm to PATH
+        run: echo "PATH=$PNPM_HOME:$PATH" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        working-directory: apps/mobile
+        run: pnpm install
+
+      - name: Run format check
+        working-directory: apps/mobile
+        run: pnpm mobile format:check
+
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## ✨ Format Job Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Job:** Format" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Mobile" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Completed Steps" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Checkout repository" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Setup Node.js" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Install dependencies (pnpm)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Run format check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  lint:
+    name: Lint
+    runs-on: self-hosted
+    needs: format
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == false &&
+       (github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'uat' || github.event.pull_request.base.ref == 'prod'))
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pnpm via Corepack
+        run: corepack enable && corepack prepare pnpm@10 --activate
+
+      - name: Ensure pnpm store path exists
+        run: mkdir -p $(pnpm store path)
+
+      - name: Add pnpm to PATH
+        run: echo "PATH=$PNPM_HOME:$PATH" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        working-directory: apps/mobile
+        run: pnpm install
+
+      - name: Run linter
+        working-directory: apps/mobile
+        run: pnpm mobile lint
+
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## 🧹 Lint Job Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Job:** Lint" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Mobile" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Completed Steps" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Checkout repository" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Setup Node.js" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Install dependencies (pnpm)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Run linter" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  check:
+    name: Check
+    runs-on: self-hosted
+    needs: lint
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == false &&
+       (github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'uat' || github.event.pull_request.base.ref == 'prod'))
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pnpm via Corepack
+        run: corepack enable && corepack prepare pnpm@10 --activate
+
+      - name: Ensure pnpm store path exists
+        run: mkdir -p $(pnpm store path)
+
+      - name: Add pnpm to PATH
+        run: echo "PATH=$PNPM_HOME:$PATH" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        working-directory: apps/mobile
+        run: pnpm install
+
+      - name: Run type check
+        working-directory: apps/mobile
+        run: pnpm mobile check
+
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## ✅ Check Job Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Job:** Check" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Mobile" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Completed Steps" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Checkout repository" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Setup Node.js" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Install dependencies (pnpm)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Run type check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  test:
+    name: Test
+    runs-on: self-hosted
+    needs: check
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == false &&
+       (github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'uat' || github.event.pull_request.base.ref == 'prod'))
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pnpm via Corepack
+        run: corepack enable && corepack prepare pnpm@10 --activate
+
+      - name: Ensure pnpm store path exists
+        run: mkdir -p $(pnpm store path)
+
+      - name: Add pnpm to PATH
+        run: echo "PATH=$PNPM_HOME:$PATH" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        working-directory: apps/mobile
+        run: pnpm install
+
+      - name: Run tests
+        working-directory: apps/mobile
+        run: pnpm mobile test
+
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## ✅ Test Job Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Job:** Test" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Mobile" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Completed Steps" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Checkout repository" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Setup Node.js" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Install dependencies (pnpm)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Run tests" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  version:
+    name: Bump Version
+    runs-on: self-hosted
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      (github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'uat' || github.event.pull_request.base.ref == 'prod')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pnpm via Corepack
+        run: corepack enable && corepack prepare pnpm@10 --activate
+
+      - name: Add pnpm to PATH
+        run: echo "PATH=$PNPM_HOME:$PATH" >> $GITHUB_ENV
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Pull latest changes
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.ref }}
+          git checkout ${{ github.event.pull_request.base.ref }}
+          git pull origin ${{ github.event.pull_request.base.ref }} --rebase || git pull origin ${{ github.event.pull_request.base.ref }} --no-rebase
+
+      - name: Get current version from package.json
+        id: current_version
+        working-directory: apps/mobile
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ -z "$VERSION" ]; then
+            echo "Error: Version is empty in package.json"
+            exit 1
+          fi
+          echo "current_version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $VERSION"
+
+      - name: Bump version in package.json
+        id: new_version
+        working-directory: apps/mobile
+        run: |
+          CURRENT_VERSION="${{ steps.current_version.outputs.current_version }}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+          node -e "
+            const fs = require('fs');
+            const p = 'package.json';
+            const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+            j.version = '$NEW_VERSION';
+            fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
+          "
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Commit version changes
+        run: |
+          git add apps/mobile/package.json
+          if git diff --staged --quiet; then
+            echo "No version changes to commit"
+          else
+            git commit -m "chore(mobile): bump mobile version to ${{ steps.new_version.outputs.new_version }} [skip ci]"
+          fi
+
+      - name: Create git tag
+        run: |
+          if git rev-parse "mobile-v${{ steps.new_version.outputs.new_version }}" >/dev/null 2>&1; then
+            echo "Tag mobile-v${{ steps.new_version.outputs.new_version }} already exists"
+          else
+            git tag -a "mobile-v${{ steps.new_version.outputs.new_version }}" -m "Release mobile v${{ steps.new_version.outputs.new_version }}"
+          fi
+
+      - name: Push changes and tags
+        run: |
+          set -e
+          BRANCH="${{ github.event.pull_request.base.ref }}"
+          PUSHED=
+          for _ in 1 2 3; do
+            git fetch origin "$BRANCH"
+            git checkout "$BRANCH"
+            git pull origin "$BRANCH" --rebase || git pull origin "$BRANCH" --no-rebase
+            if [ -z "$(git log origin/$BRANCH..HEAD 2>/dev/null)" ]; then
+              echo "No new commits to push"
+              PUSHED=1
+              break
+            fi
+            if git push origin HEAD:"$BRANCH" --force-with-lease || git push origin HEAD:"$BRANCH"; then
+              PUSHED=1
+              break
+            fi
+            echo "Push rejected (remote moved), retrying after pull..."
+          done
+          if [ -z "$PUSHED" ]; then
+            echo "ERROR: Failed to push after 3 attempts"
+            exit 1
+          fi
+          git push origin --tags || true
+
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## 📦 Version Bump Job Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Job:** Bump Version" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Mobile" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Version Information" >> $GITHUB_STEP_SUMMARY
+          echo "- **Current Version:** ${{ steps.current_version.outputs.current_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **New Version:** ${{ steps.new_version.outputs.new_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.event.pull_request.base.ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  build:
+    name: Build
+    runs-on: self-hosted
+    needs: version
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Pull latest changes (including version bump)
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.ref }}
+          git checkout ${{ github.event.pull_request.base.ref }}
+          git pull origin ${{ github.event.pull_request.base.ref }} --rebase || git pull origin ${{ github.event.pull_request.base.ref }} --no-rebase
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pnpm via Corepack
+        run: corepack enable && corepack prepare pnpm@10 --activate
+
+      - name: Ensure pnpm store path exists
+        run: mkdir -p $(pnpm store path)
+
+      - name: Add pnpm to PATH
+        run: echo "PATH=$PNPM_HOME:$PATH" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        working-directory: apps/mobile
+        run: pnpm install
+
+      - name: Get version from package.json
+        id: version
+        working-directory: apps/mobile
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ -z "$VERSION" ]; then
+            echo "Error: Version is empty in package.json"
+            exit 1
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform and build-tools
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Build Android APK (debug)
+        working-directory: apps/mobile/android
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
+        run: |
+          ./gradlew assembleDebug --no-daemon --warning-mode none
+
+      - name: Verify APK exists
+        run: |
+          APK_PATH="apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk"
+          if [ ! -f "$APK_PATH" ]; then
+            echo "::error::APK not found at $APK_PATH"
+            ls -la apps/mobile/android/app/build/outputs/apk/debug/ 2>/dev/null || true
+            find apps/mobile/android -type f -name '*.apk' 2>/dev/null || true
+            exit 1
+          fi
+          cp "$APK_PATH" apps/mobile/mobile-debug.apk
+          echo "APK built successfully:"
+          ls -lh apps/mobile/mobile-debug.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-apk-v${{ steps.version.outputs.version }}
+          path: apps/mobile/mobile-debug.apk
+          retention-days: 7
+
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## 🏗️ Build Job Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Job:** Build" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Mobile (Android)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Information" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Node Version:** ${{ env.NODE_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.event.pull_request.base.ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  get-version:
+    name: Get Version
+    runs-on: self-hosted
+    needs: [version, build]
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Get version from package.json
+        id: version
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.ref }}
+          git checkout origin/${{ github.event.pull_request.base.ref }} -- apps/mobile/package.json
+          VERSION=$(node -p "require('./apps/mobile/package.json').version")
+          if [ -z "$VERSION" ]; then
+            echo "Error: Version is empty in package.json"
+            exit 1
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
+
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## 📋 Get Version Job Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  monitor-failures:
+    name: Monitor Failed Jobs
+    runs-on: self-hosted
+    if: failure()
+    needs: [format, lint, check, test, version, build, get-version]
+    permissions:
+      contents: read
+      issues: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Create failure issue
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId
+            });
+            const { data: jobsData } = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId
+            });
+            const failedJobs = jobsData.jobs.filter(job =>
+              job.conclusion === 'failure' || job.conclusion === 'cancelled' || job.conclusion === 'timed_out'
+            );
+            if (failedJobs.length === 0) return;
+
+            const branch = context.ref.replace('refs/heads/', '');
+            const title = `🚨 CI/CD Failure: Mobile - ${branch} branch`;
+            let body = `## CI/CD Pipeline Failure\n\n`;
+            body += `**Workflow:** [Mobile](${run.html_url})\n`;
+            body += `**Branch:** \`${branch}\`\n`;
+            body += `**Commit:** [${context.sha.substring(0, 7)}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/commit/${context.sha})\n`;
+            body += `**Triggered by:** @${context.actor}\n`;
+            body += `**Started:** ${new Date(run.created_at).toISOString()}\n`;
+            body += `**Status:** ${run.status} / ${run.conclusion}\n\n`;
+            body += `### Failed Jobs (${failedJobs.length})\n\n`;
+            for (const job of failedJobs) {
+              body += `#### ❌ ${job.name}\n\n`;
+              body += `- **Status:** ${job.conclusion}\n`;
+              body += `- **Job URL:** [View Job](${job.html_url})\n`;
+              body += `- **Started:** ${job.started_at ? new Date(job.started_at).toISOString() : 'N/A'}\n`;
+              body += `- **Completed:** ${job.completed_at ? new Date(job.completed_at).toISOString() : 'N/A'}\n`;
+              const failedSteps = (job.steps || []).filter(s => s.conclusion === 'failure' || s.conclusion === 'cancelled' || s.conclusion === 'timed_out');
+              if (failedSteps.length > 0) {
+                body += `- **Failed Steps:**\n`;
+                failedSteps.forEach(s => { body += `  - [\`${s.name}\`](${job.html_url}#step:${s.number}:1) (Step ${s.number}) - ${s.conclusion}\n`; });
+              }
+              body += `\n`;
+            }
+            body += `### Workflow Context\n\n`;
+            body += `- **Workflow Run ID:** ${context.runId}\n`;
+            body += `- **Workflow Name:** ${run.name || 'Mobile'}\n`;
+            body += `- **Event:** ${context.eventName}\n`;
+            if (context.payload && context.payload.pull_request) {
+              body += `- **PR:** [${context.payload.pull_request.title}](${context.payload.pull_request.html_url})\n`;
+            }
+            body += `\n`;
+            body += `### Next Steps\n\n`;
+            body += `1. Review the failed job logs using the links above\n`;
+            body += `2. Check for common issues: format, lint, type check, tests, build\n`;
+            body += `3. Fix the issue and push a new commit\n`;
+            body += `4. Close this issue once the pipeline passes\n\n`;
+            body += `### Related Links\n\n`;
+            body += `- [Workflow Run](${run.html_url})\n`;
+            body += `- [Commit](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/commit/${context.sha})\n`;
+            body += `- [Branch](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/tree/${branch})\n\n`;
+            body += `---\n`;
+            body += `*This issue was automatically created by the CI/CD monitoring system.*\n`;
+            body += `*Workflow: \`.github/workflows/mobile.yml\`*\n`;
+
+            let milestone = (await github.rest.issues.listMilestones({ owner: context.repo.owner, repo: context.repo.repo, state: 'open' })).data.find(m => m.title === 'CI/CD Failures');
+            if (!milestone) {
+              const created = await github.rest.issues.createMilestone({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: 'CI/CD Failures',
+                description: 'Track all CI/CD pipeline failures across the repository',
+                state: 'open'
+              });
+              milestone = created.data;
+            }
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'ci-failure,mobile'
+            });
+            const existing = issues.find(i => i.title === title || i.title.includes(`Mobile - ${branch}`));
+            if (existing) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+                state: 'open',
+                milestone: milestone.number
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['ci-failure', 'mobile', 'bug', 'priority-high'],
+                milestone: milestone.number
+              });
+            }
+
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## 🔍 Failure Monitoring Job Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Job:** Monitor Failed Jobs" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** Mobile" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Note:** This job runs only when other jobs fail." >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
